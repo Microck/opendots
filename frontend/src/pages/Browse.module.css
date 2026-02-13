@@ -24,6 +24,120 @@
   text-transform: uppercase;
 }
 
+.controlsPanel {
+  border: 1px solid var(--border-light);
+  background: rgba(0, 0, 0, 0.2);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.controlRow {
+  display: grid;
+  grid-template-columns: 1.6fr minmax(140px, 220px) minmax(140px, 1fr);
+  gap: var(--space-md);
+  align-items: end;
+}
+
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.controlLabel {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.controlInput,
+.controlSelect {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-light);
+  padding: 10px;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+
+.controlInput::placeholder {
+  color: var(--text-dim);
+}
+
+.controlInput:focus,
+.controlSelect:focus {
+  outline: none;
+  border-color: #fff;
+}
+
+.controlSelect {
+  text-transform: uppercase;
+}
+
+.controlActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.clearButton {
+  border: 1px solid var(--border-light);
+  padding: 10px 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.clearButton:hover {
+  border-color: #fff;
+  color: #fff;
+}
+
+.filterGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-md);
+}
+
+.filterGroup {
+  border: 1px solid var(--border-light);
+  padding: var(--space-md);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.optionGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-sm);
+  margin-top: var(--space-sm);
+}
+
+.checkboxLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.checkboxInput {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--border-active);
+}
+
 .statePanel {
   border: 1px solid var(--border-light);
   background: rgba(0, 0, 0, 0.2);
@@ -38,4 +152,23 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: var(--space-md);
+}
+
+@media (max-width: 960px) {
+  .headerRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .controlRow {
+    grid-template-columns: 1fr;
+  }
+
+  .controlActions {
+    justify-content: flex-start;
+  }
+
+  .filterGrid {
+    grid-template-columns: 1fr;
+  }
 }

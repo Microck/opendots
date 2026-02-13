@@ -12,8 +12,8 @@ const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
 
 interface BundleListQuery {
   q?: string;
-  tag?: string;
-  type?: string;
+  tag?: string | string[];
+  type?: string | string[];
   opencode?: string;
   sort?: string;
   limit?: string;
@@ -82,6 +82,19 @@ function toStringArray(value: unknown): string[] {
   }
 
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+}
+
+function toQueryValues(value: string | string[] | undefined): string[] {
+  if (!value) {
+    return [];
+  }
+
+  const values = Array.isArray(value) ? value : [value];
+  const normalized = values
+    .map((entry) => entry.trim().toLowerCase())
+    .filter((entry) => entry.length > 0);
+
+  return Array.from(new Set(normalized));
 }
 
 function toIsoTimestamp(value: Date | string | number | null | undefined): string {
@@ -255,8 +268,8 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       );
 
       const qFilter = query.q?.trim().toLowerCase();
-      const tagFilter = query.tag?.trim().toLowerCase();
-      const typeFilter = query.type?.trim().toLowerCase();
+      const tagFilters = toQueryValues(query.tag);
+      const typeFilters = toQueryValues(query.type);
       const opencodeFilter = query.opencode?.trim().toLowerCase();
       const sort = query.sort === 'newest' ? 'newest' : 'newest';
       const limit = Number.parseInt(query.limit ?? '', 10);
@@ -266,11 +279,11 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           return false;
         }
 
-        if (tagFilter && !card.tags.some((tag) => tag.toLowerCase() === tagFilter)) {
+        if (tagFilters.length > 0 && !card.tags.some((tag) => tagFilters.includes(tag.toLowerCase()))) {
           return false;
         }
 
-        if (typeFilter && !card.artifactTypes.some((type) => type.toLowerCase() === typeFilter)) {
+        if (typeFilters.length > 0 && !card.artifactTypes.some((type) => typeFilters.includes(type.toLowerCase()))) {
           return false;
         }
 

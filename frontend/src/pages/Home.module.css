@@ -176,6 +176,14 @@
   justify-content: space-between;
   align-items: baseline;
   margin-bottom: var(--space-lg);
+  gap: var(--space-md);
+}
+
+.sectionTitleWrap {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
 }
 
 .sectionTitle {
@@ -185,6 +193,33 @@
   font-size: 1rem;
   color: #fff;
   font-weight: 600;
+}
+
+.browseAllLink {
+  border: 1px solid var(--border-light);
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-main);
+  text-decoration: none;
+  transition: all 0.2s;
+}
+
+.browseAllLink:hover {
+  border-color: var(--border-hover);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.statePanel {
+  border: 1px solid var(--border-light);
+  background: rgba(0, 0, 0, 0.2);
+  padding: var(--space-lg);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  margin-bottom: var(--space-lg);
 }
 
 .bundleGrid {

@@ -1,40 +1,7 @@
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import BundleCard, { type BundleCardData } from '../components/BundleCard'
 import styles from './Home.module.css'
-
-const recentBundles: BundleCardData[] = [
-  {
-    id: 'cyberpunk-theme',
-    name: 'Cyberpunk-Theme',
-    version: 'v2.1',
-    summary: 'Neon aesthetic theme with high contrast syntax highlighting.',
-    tags: ['Theme', 'Dark'],
-    stars: '1.2k',
-    updated: '2h ago',
-    accentColor: '#A0C4FF',
-  },
-  {
-    id: 'react-dev-pack',
-    name: 'React-Dev-Pack',
-    version: 'v1.0',
-    summary: 'Essential tools, snippets and linters for React development.',
-    tags: ['Tools', 'React'],
-    riskBadges: ['EXEC'],
-    stars: '850',
-    updated: '1d ago',
-    accentColor: '#FFD6A5',
-  },
-  {
-    id: 'vim-mode',
-    name: 'Vim-Mode',
-    version: 'v0.9',
-    summary: 'Complete Vim keybinding emulation layer.',
-    tags: ['Mode', 'Keymap'],
-    stars: '3.4k',
-    updated: '5d ago',
-    accentColor: '#E7BBE3',
-  },
-]
 
 interface HomeProps {
   isLoggedIn: boolean
@@ -42,6 +9,40 @@ interface HomeProps {
 
 export default function Home({ isLoggedIn }: HomeProps) {
   const navigate = useNavigate()
+  const [recentBundles, setRecentBundles] = useState<BundleCardData[]>([])
+  const [loadingRecent, setLoadingRecent] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    const fetchRecent = async () => {
+      try {
+        const response = await fetch('/api/bundles?sort=newest&limit=6')
+        if (!response.ok) {
+          throw new Error('Failed to load recent bundles')
+        }
+
+        const data: unknown = await response.json()
+        if (!cancelled) {
+          setRecentBundles(Array.isArray(data) ? (data as BundleCardData[]) : [])
+        }
+      } catch {
+        if (!cancelled) {
+          setRecentBundles([])
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingRecent(false)
+        }
+      }
+    }
+
+    fetchRecent()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <div className={styles.page}>
@@ -79,15 +80,30 @@ export default function Home({ isLoggedIn }: HomeProps) {
         <div className={styles.decoLine} />
 
         <div className={styles.sectionHeader}>
-          <span className={styles.sectionTitle}>RECENT TRANSMISSIONS</span>
-          <span className="text-mono" style={{ color: 'var(--text-dim)' }}>REF: ONLINE</span>
+          <div className={styles.sectionTitleWrap}>
+            <span className={styles.sectionTitle}>RECENT TRANSMISSIONS</span>
+            <span className="text-mono" style={{ color: 'var(--text-dim)' }}>REF: ONLINE</span>
+          </div>
+          <Link to="/browse" className={styles.browseAllLink}>
+            BROWSE ALL
+          </Link>
         </div>
 
-        <div className={styles.bundleGrid}>
-          {recentBundles.map(b => (
-            <BundleCard key={b.id} bundle={b} />
-          ))}
-        </div>
+        {loadingRecent && (
+          <div className={styles.statePanel}>Loading recent bundles...</div>
+        )}
+
+        {!loadingRecent && recentBundles.length === 0 && (
+          <div className={styles.statePanel}>No recent bundles yet.</div>
+        )}
+
+        {!loadingRecent && recentBundles.length > 0 && (
+          <div className={styles.bundleGrid}>
+            {recentBundles.map(b => (
+              <BundleCard key={b.id} bundle={b} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

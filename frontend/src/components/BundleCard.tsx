@@ -1,48 +1,101 @@
+import type { CSSProperties, KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import styles from './BundleCard.module.css'
 
 export interface BundleCardData {
   id: string
+  slug: string
   name: string
-  version: string
   summary: string
   tags: string[]
-  riskBadges?: string[]
-  stars: string
-  updated: string
-  accentColor?: string
+  artifactTypes: string[]
+  riskBadges: string[]
+  accentColor: string | null
+  stars: number
+  forks: number
+  updatedAt: string
 }
 
 interface BundleCardProps {
   bundle: BundleCardData
 }
 
+function formatRelativeTime(updatedAt: string): string {
+  const updatedMs = new Date(updatedAt).getTime()
+  if (Number.isNaN(updatedMs)) {
+    return '--'
+  }
+
+  const diffMs = Date.now() - updatedMs
+  const minute = 60 * 1000
+  const hour = 60 * minute
+  const day = 24 * hour
+
+  if (diffMs < minute) {
+    return 'just now'
+  }
+
+  if (diffMs < hour) {
+    return `${Math.floor(diffMs / minute)}m ago`
+  }
+
+  if (diffMs < day) {
+    return `${Math.floor(diffMs / hour)}h ago`
+  }
+
+  return `${Math.floor(diffMs / day)}d ago`
+}
+
+function formatCount(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value)
+}
+
 export default function BundleCard({ bundle }: BundleCardProps) {
   const navigate = useNavigate()
 
+  const handleOpenDetail = () => {
+    navigate(`/bundle/${bundle.id}`)
+  }
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleOpenDetail()
+    }
+  }
+
+  const cardStyle = {
+    '--card-accent': bundle.accentColor ?? 'var(--border-active)',
+  } as CSSProperties
+
   return (
-    <div className={styles.card} onClick={() => navigate(`/bundle/${bundle.id}`)}>
+    <div
+      className={styles.card}
+      style={cardStyle}
+      onClick={handleOpenDetail}
+      role="link"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
       <div className={styles.cardAccent} />
       <div className={styles.header}>
         <h3 className={styles.name}>{bundle.name}</h3>
-        <span className="text-mono" style={{ fontSize: '0.7rem' }}>{bundle.version}</span>
       </div>
       <p className={styles.summary}>{bundle.summary}</p>
       <div className={styles.tags}>
         {bundle.tags.map(tag => (
           <span key={tag} className={styles.chip}>{tag}</span>
         ))}
-        {bundle.riskBadges?.map(badge => (
+        {bundle.riskBadges.map(badge => (
           <span key={badge} className={styles.badgeRisk}>{badge}</span>
         ))}
       </div>
       <div className={styles.footer}>
-        <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-          ★ {bundle.stars}
-        </span>
-        <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-          UPD: {bundle.updated}
-        </span>
+        <div className={styles.stats}>
+          <span className={styles.metaItem}>Stars {formatCount(bundle.stars)}</span>
+          <span className={styles.metaItem}>Forks {formatCount(bundle.forks)}</span>
+        </div>
+        <span className={styles.metaItem}>Upd: {formatRelativeTime(bundle.updatedAt)}</span>
       </div>
     </div>
   )

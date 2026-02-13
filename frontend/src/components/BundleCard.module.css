@@ -2,6 +2,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   padding: var(--space-lg);
+  padding-left: calc(var(--space-lg) + 4px);
   transition: all 0.2s;
   display: flex;
   flex-direction: column;
@@ -19,23 +20,22 @@
 .cardAccent {
   position: absolute;
   top: 0; left: 0; bottom: 0;
-  width: 3px;
-  background: var(--border-light);
-  display: none;
+  width: 4px;
+  background: var(--card-accent, var(--border-active));
 }
 .card:hover .cardAccent {
-  background: #fff;
-  box-shadow: 0 0 10px rgba(255,255,255,0.5);
+  box-shadow: 0 0 8px rgba(128, 220, 255, 0.4);
 }
 
 .header {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
   margin-bottom: var(--space-sm);
 }
 
 .name {
   font-size: 1rem;
+  margin: 0;
 }
 
 .summary {
@@ -84,4 +84,18 @@
   align-items: center;
   border-top: 1px solid var(--border-light);
   padding-top: 12px;
+  gap: var(--space-sm);
+}
+
+.stats {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+
+.metaItem {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
 }

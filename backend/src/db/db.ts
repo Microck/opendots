@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const dbPath = path.join(__dirname, '..', 'dev.db');
+const dbPath = path.join(__dirname, '..', '..', 'dev.db');
 const db = new Database(dbPath);
 
 export const dbInstance = drizzle(db, { schema });

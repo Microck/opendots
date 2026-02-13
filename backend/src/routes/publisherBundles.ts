@@ -189,6 +189,8 @@ export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         defaultBranch: repoInfo.default_branch,
         repoHtmlUrl: repoInfo.html_url,
         manifestJson: JSON.stringify(manifest),
+        stars: repoInfo.stargazers_count,
+        forks: repoInfo.forks_count,
         status: 'registered',
       }).returning();
 
@@ -260,6 +262,23 @@ export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       if (!githubAccessToken) {
         reply.code(401);
         return { error: 'GitHub access token not found' };
+      }
+
+      const octokit = createGitHubClient(githubAccessToken);
+      const latestRepoInfo = await getRepoInfo(
+        octokit,
+        bundle[0].githubOwner,
+        bundle[0].githubRepo
+      );
+
+      if (latestRepoInfo) {
+        await db.update(publisherBundle)
+          .set({
+            stars: latestRepoInfo.stargazers_count,
+            forks: latestRepoInfo.forks_count,
+            updatedAt: new Date(),
+          })
+          .where(eq(publisherBundle.id, bundleId));
       }
 
       const result = await importBundle(bundleId, githubAccessToken);

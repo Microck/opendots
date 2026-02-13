@@ -24,6 +24,8 @@ export interface GitHubRepoInfo {
   default_branch: string;
   html_url: string;
   description: string | null;
+  stargazers_count: number;
+  forks_count: number;
   license: {
     spdx_id: string;
   } | null;
@@ -55,6 +57,8 @@ export async function getRepoInfo(
       default_branch: response.data.default_branch,
       html_url: response.data.html_url,
       description: response.data.description ?? null,
+      stargazers_count: response.data.stargazers_count ?? 0,
+      forks_count: response.data.forks_count ?? 0,
       license: response.data.license ? { spdx_id: response.data.license.spdx_id ?? 'NOASSERTION' } : null,
       permissions: {
         admin: response.data.permissions?.admin || false,

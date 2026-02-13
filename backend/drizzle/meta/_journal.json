@@ -15,6 +15,13 @@
       "when": 1770965999308,
       "tag": "0001_purple_smiling_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1771019196118,
+      "tag": "0002_flat_squadron_supreme",
+      "breakpoints": true
     }
   ]
 }

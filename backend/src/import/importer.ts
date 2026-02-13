@@ -3,13 +3,14 @@ import { dbInstance as db } from '../db/db';
 import { importRun, snapshot } from '../db/schema/imports';
 import { publisherBundle } from '../db/schema/publisher';
 import { eq, desc, and } from 'drizzle-orm';
-import { createGitHubClient } from '../github/githubClient';
+import { createGitHubClient, getRepoInfo } from '../github/githubClient';
 import { saveSnapshot, snapshotExists } from '../storage/snapshots';
-import { buildFileIndex } from './fileIndex';
+import { buildFileIndex, extractFileFromZip, type FileIndexEntry } from './fileIndex';
 import { validateSnapshot } from './validator';
 import { scanForRisks } from './riskScanner';
 import { scanForSecrets, SECRET_SCAN_DISCLAIMER } from './secretScanner';
 import AdmZip from 'adm-zip';
+import { parse as parseJsonc } from 'comment-json';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -53,6 +54,13 @@ export async function importBundle(
     const { githubOwner, githubRepo } = bundleData;
 
     const octokit = createGitHubClient(githubAccessToken);
+    let latestRepoInfo = null;
+
+    try {
+      latestRepoInfo = await getRepoInfo(octokit, githubOwner, githubRepo);
+    } catch (repoInfoError) {
+      console.warn('Failed to refresh GitHub stats during import:', repoInfoError);
+    }
 
     const commitSha = await getHeadCommitSha(octokit, githubOwner, githubRepo);
     if (!commitSha) {
@@ -98,6 +106,7 @@ export async function importBundle(
 
       // Build file index from the saved snapshot
       const fileIndex = buildFileIndex(snapshotInfo.path);
+      const accentColor = extractAccentColorFromSnapshot(snapshotInfo.path, fileIndex);
 
       // Run safety scans on extracted snapshot
       const safetyResults = await runSafetyScans(snapshotInfo.path);
@@ -110,6 +119,25 @@ export async function importBundle(
         fileIndex: JSON.stringify(fileIndex),
         safetyResults: JSON.stringify(safetyResults),
       });
+
+      const bundleUpdate: {
+        updatedAt: Date;
+        accentColor: string | null;
+        stars?: number;
+        forks?: number;
+      } = {
+        updatedAt: new Date(),
+        accentColor,
+      };
+
+      if (latestRepoInfo) {
+        bundleUpdate.stars = latestRepoInfo.stargazers_count;
+        bundleUpdate.forks = latestRepoInfo.forks_count;
+      }
+
+      await db.update(publisherBundle)
+        .set(bundleUpdate)
+        .where(eq(publisherBundle.id, bundleId));
 
       await db.update(importRun)
         .set({
@@ -256,4 +284,88 @@ async function runSafetyScans(zipPath: string): Promise<SafetyResults> {
       console.error('Failed to clean up temp directory:', cleanupError);
     }
   }
+}
+
+function extractAccentColorFromSnapshot(zipPath: string, fileIndex: FileIndexEntry[]): string | null {
+  for (const file of fileIndex) {
+    if (!isThemeFile(file)) {
+      continue;
+    }
+
+    const content = extractFileFromZip(zipPath, file.path);
+    if (!content) {
+      continue;
+    }
+
+    const parsedTheme = parseThemeJson(content);
+    if (!parsedTheme) {
+      continue;
+    }
+
+    const rawPrimary = getThemePrimary(parsedTheme);
+    if (!rawPrimary) {
+      continue;
+    }
+
+    const normalizedColor = normalizeHexColor(rawPrimary);
+    if (normalizedColor) {
+      return normalizedColor;
+    }
+  }
+
+  return null;
+}
+
+function isThemeFile(file: FileIndexEntry): boolean {
+  if (file.kind === 'theme') {
+    return true;
+  }
+
+  const normalizedPath = file.path.toLowerCase();
+  return /(^|\/)(\.opencode\/)?themes\//.test(normalizedPath) && normalizedPath.endsWith('.json');
+}
+
+function parseThemeJson(content: string): Record<string, unknown> | null {
+  try {
+    const parsed = parseJsonc(content, undefined, true);
+    if (parsed && typeof parsed === 'object') {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function getThemePrimary(theme: Record<string, unknown>): string | null {
+  const directPrimary = theme.primary;
+  if (typeof directPrimary === 'string') {
+    return directPrimary;
+  }
+
+  const colors = theme.colors;
+  if (colors && typeof colors === 'object') {
+    const nestedPrimary = (colors as Record<string, unknown>).primary;
+    if (typeof nestedPrimary === 'string') {
+      return nestedPrimary;
+    }
+  }
+
+  return null;
+}
+
+function normalizeHexColor(color: string): string | null {
+  const trimmed = color.trim();
+  const match = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const hex = match[1].toLowerCase();
+  if (hex.length === 3) {
+    return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+  }
+
+  return `#${hex}`;
 }

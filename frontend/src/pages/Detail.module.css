@@ -44,6 +44,8 @@
   background: transparent;
   color: #fff;
   display: inline-block;
+  text-decoration: none;
+  text-align: center;
 }
 .btnOutline:hover {
   background: rgba(255,255,255,0.1);
@@ -73,14 +75,46 @@
   text-transform: uppercase;
 }
 
-.safetyNotice {
-  background: rgba(255, 68, 68, 0.1);
-  border: 1px solid rgba(255, 68, 68, 0.4);
-  padding: var(--space-md);
-  margin-bottom: var(--space-lg);
+/* Safety Section */
+.safetySection {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.safetyHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.safetyTitleRow {
   display: flex;
   align-items: center;
-  gap: var(--space-lg);
+  gap: var(--space-sm);
+}
+
+.safetyIcon {
+  width: 20px;
+  height: 20px;
+  color: var(--text-muted);
+}
+
+.safetyHeading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
+}
+
+.riskFlagsRow {
+  display: flex;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
 }
 
 .badgeRisk {
@@ -91,31 +125,165 @@
   color: #ff6b6b;
   text-transform: uppercase;
   display: inline-block;
-  margin-right: 4px;
   border-radius: 0;
   background: rgba(255, 107, 107, 0.1);
+  cursor: help;
 }
 
-.safetyTitle {
-  font-size: 0.9rem;
-  color: #ff6b6b;
-  font-family: var(--font-body);
-  font-weight: 700;
+/* Validation Grid */
+.validationGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border-light);
 }
 
-.safetyText {
-  font-size: 0.8rem;
+.validationItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.validationLabel {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
   color: var(--text-muted);
+  text-transform: uppercase;
 }
 
-.explorerSection {
+.validationValid {
+  color: #4caf50;
+  font-weight: 500;
+}
+
+.validationInvalid {
+  color: #ff6b6b;
+  font-weight: 500;
+}
+
+.validationWarning {
+  color: #ff9800;
+  font-weight: 500;
+}
+
+.validationUnknown {
+  color: var(--text-dim);
+}
+
+/* Expandable Details */
+.validationDetails {
+  margin-bottom: var(--space-md);
+}
+
+.expandButton {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: var(--space-xs) 0;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.expandButton:hover {
+  color: var(--text-main);
+}
+
+.errorsList,
+.warningsList {
+  background: rgba(255, 107, 107, 0.05);
+  border-left: 2px solid #ff6b6b;
+  padding: var(--space-md);
+  margin-top: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.errorItem {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-xs);
+}
+
+.errorSource {
+  font-family: var(--font-mono);
+  color: #ff6b6b;
+}
+
+.warningItem {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-sm);
+  padding-bottom: var(--space-sm);
+  border-bottom: 1px solid var(--border-light);
+}
+.warningItem:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.warningFile {
+  font-family: var(--font-mono);
+  color: #ff9800;
+  display: block;
+}
+
+.warningPattern {
+  display: block;
+  margin: 4px 0;
+}
+
+.warningSnippet {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  background: rgba(0,0,0,0.3);
+  padding: 4px 8px;
+  color: var(--text-dim);
+}
+
+/* Disclaimer */
+.disclaimer {
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid rgba(255, 152, 0, 0.4);
+  padding: var(--space-md);
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-start;
+}
+
+.disclaimerIcon {
+  width: 20px;
+  height: 20px;
+  color: #ff9800;
+  flex-shrink: 0;
+}
+
+.disclaimer p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.disclaimer strong {
+  color: #ff9800;
+}
+
+/* Download Section */
+.downloadSection {
   margin-bottom: var(--space-xl);
 }
 
-.explorerHeader {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: var(--space-sm);
+.sectionHeading {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  color: var(--text-main);
 }
 
 .downloadGrid {
@@ -131,27 +299,35 @@
   transition: all 0.2s;
   display: flex;
   flex-direction: column;
+  text-align: center;
 }
 .downloadCard:hover {
   border-color: var(--border-hover);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.downloadIcon {
+  font-size: 2rem;
+  margin-bottom: var(--space-sm);
 }
 
 .downloadTitle {
-  font-size: 1rem;
+  font-size: 1.1rem;
   margin-bottom: var(--space-sm);
+  font-weight: 600;
 }
 
 .downloadDesc {
   font-size: 0.85rem;
   color: var(--text-muted);
   margin-bottom: var(--space-md);
+  flex-grow: 1;
 }
 
 .btnPrimary {
   background: #FFFFFF;
   color: var(--bg-body);
-  padding: 8px 24px;
+  padding: 10px 24px;
   border-radius: 0;
   font-family: var(--font-body);
   font-weight: 700;
@@ -161,17 +337,39 @@
   border: 1px solid #FFFFFF;
   width: 100%;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
 }
 .btnPrimary:hover {
   background: transparent;
   color: #FFFFFF;
 }
 
-.downloadPath {
+.downloadInstructions {
   font-family: var(--font-mono);
   margin-top: var(--space-md);
   font-size: 0.75rem;
   color: var(--text-dim);
+  text-align: left;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-light);
+}
+
+.downloadInstructions code {
+  background: rgba(255,255,255,0.1);
+  padding: 2px 4px;
+  font-size: 0.7rem;
+}
+
+/* Explorer Section */
+.explorerSection {
+  margin-bottom: var(--space-xl);
+}
+
+.explorerHeader {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
 }
 
 /* Loading and Error States */
@@ -232,4 +430,25 @@
 .importError {
   color: #ff6b6b;
   font-size: 0.85rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .metaGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .downloadGrid {
+    grid-template-columns: 1fr;
+  }
+  
+  .headerTop {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+  
+  .headerTop > div:last-child {
+    text-align: left;
+    width: 100%;
+  }
 }

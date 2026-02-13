@@ -3,6 +3,38 @@ import { useParams } from 'react-router'
 import CodeExplorer from '../components/CodeExplorer'
 import styles from './Detail.module.css'
 
+interface SafetyResults {
+  validation: {
+    config: {
+      valid: boolean
+      errors: string[]
+      warnings: string[]
+    } | null
+    themes: Array<{
+      file: string
+      valid: boolean
+      errors: string[]
+    }>
+    skills: Array<{
+      file: string
+      valid: boolean
+      errors: string[]
+    }>
+  }
+  riskFlags: Array<{
+    flag: string
+    description: string
+    files: string[]
+    severity: 'high' | 'medium' | 'low'
+  }>
+  secretWarnings: Array<{
+    file: string
+    line: number
+    pattern: string
+    snippet: string
+  }>
+}
+
 interface BundleData {
   id: string
   name: string
@@ -38,6 +70,7 @@ interface BundleData {
     errorCode?: string
     errorMessage?: string
   } | null
+  safetyResults: SafetyResults | null
 }
 
 function formatSize(bytes: number): string {
@@ -60,6 +93,8 @@ export default function Detail() {
   const [bundle, setBundle] = useState<BundleData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showValidationDetails, setShowValidationDetails] = useState(false)
+  const [showSecretWarnings, setShowSecretWarnings] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -113,7 +148,17 @@ export default function Detail() {
     )
   }
 
-  const hasSafetyWarnings = false // Will be implemented in 02-02
+  const safety = bundle.safetyResults
+  const hasValidationErrors = (safety?.validation?.config?.errors?.length ?? 0) > 0 ||
+    safety?.validation?.themes?.some(t => !t.valid) ||
+    safety?.validation?.skills?.some(s => !s.valid)
+  const hasRiskFlags = safety?.riskFlags && safety.riskFlags.length > 0
+  const hasSecretWarnings = safety?.secretWarnings && safety.secretWarnings.length > 0
+
+  // Calculate overall validation status
+  const configValid = safety?.validation?.config?.valid ?? null
+  const themesValid = safety?.validation?.themes?.every(t => t.valid) ?? null
+  const skillsValid = safety?.validation?.skills?.every(s => s.valid) ?? null
 
   return (
     <div className={styles.page}>
@@ -169,23 +214,177 @@ export default function Detail() {
           </div>
         </header>
 
-        {hasSafetyWarnings && (
-          <div className={styles.safetyNotice}>
-            <div>
-              <span className={styles.badgeRisk}>EXEC</span>
-              <span className={styles.badgeRisk}>NETWORK</span>
+        {/* Safety Section */}
+        {safety && (
+          <section className={styles.safetySection}>
+            <div className={styles.safetyHeader}>
+              <div className={styles.safetyTitleRow}>
+                <svg className={styles.safetyIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="M9 12l2 2 4-4" />
+                </svg>
+                <h2 className={styles.safetyHeading}>Safety Assessment</h2>
+              </div>
+              
+              {/* Risk Flags */}
+              {hasRiskFlags && (
+                <div className={styles.riskFlagsRow}>
+                  {safety.riskFlags.map((flag) => (
+                    <span 
+                      key={flag.flag} 
+                      className={styles.badgeRisk}
+                      title={`${flag.description} (${flag.severity} severity)`}
+                    >
+                      {flag.flag}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            <div style={{ flexGrow: 1 }}>
-              <h4 className={styles.safetyTitle}>Safety Notice</h4>
-              <p className={styles.safetyText}>
-                This bundle contains executable code and remote fetch capabilities.
-                <br />Validation Status: <span style={{ color: '#4caf50' }}>Schema OK</span>, <span style={{ color: '#ff9800' }}>Scan Warning</span>.
+
+            {/* Validation Summary */}
+            <div className={styles.validationGrid}>
+              <div className={styles.validationItem}>
+                <span className={styles.validationLabel}>Config</span>
+                <span className={configValid === null ? styles.validationUnknown : configValid ? styles.validationValid : styles.validationInvalid}>
+                  {configValid === null ? 'N/A' : configValid ? 'Valid' : 'Invalid'}
+                </span>
+              </div>
+              <div className={styles.validationItem}>
+                <span className={styles.validationLabel}>Themes</span>
+                <span className={themesValid === null ? styles.validationUnknown : themesValid ? styles.validationValid : styles.validationInvalid}>
+                  {themesValid === null ? 'N/A' : themesValid ? 'Valid' : 'Invalid'}
+                </span>
+              </div>
+              <div className={styles.validationItem}>
+                <span className={styles.validationLabel}>Skills</span>
+                <span className={skillsValid === null ? styles.validationUnknown : skillsValid ? styles.validationValid : styles.validationInvalid}>
+                  {skillsValid === null ? 'N/A' : skillsValid ? 'Valid' : 'Invalid'}
+                </span>
+              </div>
+              {safety.secretWarnings && (
+                <div className={styles.validationItem}>
+                  <span className={styles.validationLabel}>Secrets</span>
+                  <span className={hasSecretWarnings ? styles.validationWarning : styles.validationValid}>
+                    {safety.secretWarnings.length} warnings
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Expandable Validation Details */}
+            {(hasValidationErrors || hasSecretWarnings) && (
+              <div className={styles.validationDetails}>
+                {hasValidationErrors && (
+                  <button 
+                    className={styles.expandButton}
+                    onClick={() => setShowValidationDetails(!showValidationDetails)}
+                  >
+                    {showValidationDetails ? '▼' : '▶'} Validation errors
+                  </button>
+                )}
+                {showValidationDetails && hasValidationErrors && (
+                  <div className={styles.errorsList}>
+                    {safety.validation.config?.errors.map((err, i) => (
+                      <div key={`config-${i}`} className={styles.errorItem}>
+                        <span className={styles.errorSource}>Config:</span> {err}
+                      </div>
+                    ))}
+                    {safety.validation.themes?.filter(t => !t.valid).map((theme, i) => (
+                      <div key={`theme-${i}`} className={styles.errorItem}>
+                        <span className={styles.errorSource}>{theme.file}:</span> {theme.errors.join(', ')}
+                      </div>
+                    ))}
+                    {safety.validation.skills?.filter(s => !s.valid).map((skill, i) => (
+                      <div key={`skill-${i}`} className={styles.errorItem}>
+                        <span className={styles.errorSource}>{skill.file}:</span> {skill.errors.join(', ')}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {hasSecretWarnings && (
+                  <button 
+                    className={styles.expandButton}
+                    onClick={() => setShowSecretWarnings(!showSecretWarnings)}
+                  >
+                    {showSecretWarnings ? '▼' : '▶'} Secret warnings ({safety.secretWarnings.length})
+                  </button>
+                )}
+                {showSecretWarnings && hasSecretWarnings && (
+                  <div className={styles.warningsList}>
+                    {safety.secretWarnings.map((warning, i) => (
+                      <div key={`secret-${i}`} className={styles.warningItem}>
+                        <span className={styles.warningFile}>{warning.file}:{warning.line}</span>
+                        <span className={styles.warningPattern}>{warning.pattern}</span>
+                        <code className={styles.warningSnippet}>{warning.snippet}</code>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Disclaimer */}
+            <div className={styles.disclaimer}>
+              <svg className={styles.disclaimerIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              <p>
+                Opendots performs best-effort scanning. Bundles may contain executable code.{" "}
+                <strong>You are responsible for reviewing what you install.</strong>
               </p>
             </div>
-          </div>
+          </section>
         )}
 
-        <div className={styles.explorerSection}>
+        {/* Download Section */}
+        <section className={styles.downloadSection}>
+          <h2 className={styles.sectionHeading}>Download</h2>
+          <div className={styles.downloadGrid}>
+            <div className={styles.downloadCard}>
+              <div className={styles.downloadIcon}>📁</div>
+              <h3 className={styles.downloadTitle}>Project ZIP</h3>
+              <p className={styles.downloadDesc}>
+                Install into current project. Config lives alongside code and applies only to this directory.
+              </p>
+              <a 
+                href={`/api/bundles/${bundle.id}/download?variant=project`}
+                className={styles.btnPrimary}
+                download
+              >
+                Download Project ZIP
+              </a>
+              <div className={styles.downloadInstructions}>
+                <strong>Install:</strong> Extract to your project root. The <code>opencode.json</code> and{' '}
+                <code>.opencode/</code> directory will be created.
+              </div>
+            </div>
+            
+            <div className={styles.downloadCard}>
+              <div className={styles.downloadIcon}>🌐</div>
+              <h3 className={styles.downloadTitle}>Global ZIP</h3>
+              <p className={styles.downloadDesc}>
+                Install to user home. Config applies to all OpenCode projects on your machine.
+              </p>
+              <a 
+                href={`/api/bundles/${bundle.id}/download?variant=global`}
+                className={styles.btnOutline}
+                download
+              >
+                Download Global ZIP
+              </a>
+              <div className={styles.downloadInstructions}>
+                <strong>Install:</strong> Extract to <code>~/.config/opencode/</code>. Config will be available globally.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Bundle Contents */}
+        <section className={styles.explorerSection}>
           <div className={styles.explorerHeader}>
             <span className="text-label">BUNDLE CONTENTS</span>
             <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
@@ -193,30 +392,7 @@ export default function Detail() {
             </span>
           </div>
           <CodeExplorer bundleId={bundle.id} files={bundle.fileIndex} />
-        </div>
-
-        <div className={styles.downloadGrid}>
-          <div className={styles.downloadCard}>
-            <h3 className={styles.downloadTitle}>Project Install</h3>
-            <p className={styles.downloadDesc}>
-              Install into current project. Config lives alongside code.
-            </p>
-            <button className={styles.btnPrimary}>Download ZIP</button>
-            <div className={styles.downloadPath}>
-              Extract to: ./
-            </div>
-          </div>
-          <div className={styles.downloadCard}>
-            <h3 className={styles.downloadTitle}>Global Install</h3>
-            <p className={styles.downloadDesc}>
-              Install to user home. Applies to all projects.
-            </p>
-            <button className={styles.btnOutline} style={{ width: '100%' }}>Download ZIP</button>
-            <div className={styles.downloadPath}>
-              Extract to: ~/.config/opencode/
-            </div>
-          </div>
-        </div>
+        </section>
 
         <div className={styles.importInfo}>
           <span className="text-dim">

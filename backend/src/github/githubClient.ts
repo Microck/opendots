@@ -23,6 +23,10 @@ export interface GitHubRepoInfo {
   };
   default_branch: string;
   html_url: string;
+  description: string | null;
+  license: {
+    spdx_id: string;
+  } | null;
   permissions: {
     admin: boolean;
     maintain: boolean;
@@ -50,6 +54,8 @@ export async function getRepoInfo(
       },
       default_branch: response.data.default_branch,
       html_url: response.data.html_url,
+      description: response.data.description ?? null,
+      license: response.data.license ? { spdx_id: response.data.license.spdx_id ?? 'NOASSERTION' } : null,
       permissions: {
         admin: response.data.permissions?.admin || false,
         maintain: response.data.permissions?.maintain || false,

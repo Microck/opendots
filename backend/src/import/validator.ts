@@ -8,61 +8,46 @@ import * as path from 'path';
 const OPENCODE_CONFIG_SCHEMA = {
   type: 'object',
   properties: {
-    name: { type: 'string' },
-    description: { type: 'string' },
-    version: { type: 'string' },
-    compatibility: { type: 'string' },
-    mode: {
-      type: 'string',
-      enum: ['strict', 'lax', 'yolo'],
-    },
+    '$schema': { type: 'string' },
     theme: { type: 'string' },
-    agents: {
-      type: 'object',
-      additionalProperties: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          description: { type: 'string' },
-          model: { type: 'string' },
-        },
-      },
+    model: { type: 'string' },
+    small_model: { type: 'string' },
+    lsp: { type: 'boolean' },
+    formatter: { type: 'boolean' },
+    tui: { type: 'object' },
+    provider: { type: 'object' },
+    plugin: {
+      type: 'array',
+      items: { type: 'string' },
     },
-    commands: {
-      type: 'object',
-      additionalProperties: {
-        type: 'object',
-        properties: {
-          description: { type: 'string' },
-          steps: { type: 'array', items: { type: 'string' } },
-        },
-      },
-    },
+    mcp: { type: 'object' },
+    permission: { type: 'object' },
+    experimental: { type: 'object' },
+    agent: { type: 'object' },
   },
-  required: ['name'],
+  additionalProperties: true,
+  // No required fields - opencode.json is flexible
 };
 
 // Minimal embedded schema for OpenCode themes
 const THEME_SCHEMA = {
   type: 'object',
   properties: {
-    name: { type: 'string' },
-    description: { type: 'string' },
-    colors: {
-      type: 'object',
-      properties: {
-        primary: { type: 'string' },
-        secondary: { type: 'string' },
-        background: { type: 'string' },
-        foreground: { type: 'string' },
-        accent: { type: 'string' },
-      },
-    },
-    tokens: {
-      type: 'object',
-    },
+    '$schema': { type: 'string' },
+    primary: { type: 'string' },
+    secondary: { type: 'string' },
+    accent: { type: 'string' },
+    text: { type: 'string' },
+    textMuted: { type: 'string' },
+    background: { type: 'string' },
+    border: { type: 'string' },
+    error: { type: 'string' },
+    warning: { type: 'string' },
+    success: { type: 'string' },
+    info: { type: 'string' },
   },
-  required: ['name', 'colors'],
+  additionalProperties: true,
+  // No required fields - themes vary
 };
 
 // SKILL.md frontmatter required fields

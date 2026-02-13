@@ -4,7 +4,7 @@ import path from 'path';
 export interface FileIndexEntry {
   path: string;
   size: number;
-  kind: 'config' | 'theme' | 'skill' | 'snippet' | 'script' | 'other';
+  kind: 'config' | 'theme' | 'skill' | 'agent' | 'command' | 'plugin' | 'tool' | 'prompt' | 'mode' | 'rules' | 'script' | 'other';
   isBinary: boolean;
   isPreviewable: boolean;
 }
@@ -43,30 +43,62 @@ function isPreviewableFile(fileName: string): boolean {
 
 function getFileKind(filePath: string): FileIndexEntry['kind'] {
   const normalizedPath = filePath.toLowerCase();
-  const fileName = path.basename(normalizedPath);
+  const fileName = path.basename(filePath); // Keep original case for AGENTS.md etc.
+  const fileNameLower = fileName.toLowerCase();
   
-  // Config files
-  if (fileName === 'opencode.json' || fileName === 'opendots.yml' || fileName === 'opendots.yaml') {
+  // Config files at root
+  if (fileNameLower === 'opencode.json' || fileNameLower === 'opencode.jsonc' || 
+      fileNameLower === 'opendots.yml' || fileNameLower === 'opendots.yaml') {
     return 'config';
   }
   
-  // Theme files
-  if (normalizedPath.includes('.opencode/themes/') || normalizedPath.includes('/themes/')) {
+  // Rules files (AGENTS.md, CLAUDE.md at any level)
+  if (fileName === 'AGENTS.md' || fileName === 'CLAUDE.md') {
+    return 'rules';
+  }
+  
+  // Theme files - under themes/ or .opencode/themes/
+  if (normalizedPath.match(/^(\.opencode\/)?themes\//)) {
     return 'theme';
   }
   
-  // Skill files
-  if (normalizedPath.includes('/skills/') || fileName === 'skill.md' || fileName.endsWith('.skill.md')) {
+  // Agent definitions - under agent/ or .opencode/agents/
+  if (normalizedPath.match(/^(\.opencode\/)?agents?\//)) {
+    return 'agent';
+  }
+  
+  // Command definitions - under command/ or commands/ or .opencode/commands/
+  if (normalizedPath.match(/^(\.opencode\/)?commands?\//)) {
+    return 'command';
+  }
+  
+  // Plugin files - under plugins/ or .opencode/plugins/
+  if (normalizedPath.match(/^(\.opencode\/)?plugins?\//)) {
+    return 'plugin';
+  }
+  
+  // Tool files - under tools/ or .opencode/tools/
+  if (normalizedPath.match(/^(\.opencode\/)?tools?\//)) {
+    return 'tool';
+  }
+  
+  // Skill files - under skills/ or has SKILL.md name
+  if (normalizedPath.match(/^(\.opencode\/)?skills\//) || fileNameLower === 'skill.md') {
     return 'skill';
   }
   
-  // Snippet files
-  if (normalizedPath.includes('/snippets/') || normalizedPath.includes('.opencode/snippets/')) {
-    return 'snippet';
+  // Prompt files - under prompts/
+  if (normalizedPath.match(/^(\.opencode\/)?prompts?\//)) {
+    return 'prompt';
+  }
+  
+  // Mode definitions - under modes/
+  if (normalizedPath.match(/^(\.opencode\/)?modes?\//)) {
+    return 'mode';
   }
   
   // Script files
-  if (normalizedPath.includes('/scripts/') || normalizedPath.includes('.opencode/scripts/')) {
+  if (normalizedPath.match(/^(\.opencode\/)?scripts?\//)) {
     return 'script';
   }
   

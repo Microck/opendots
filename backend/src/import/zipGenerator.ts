@@ -35,25 +35,11 @@ function getOutputPath(entryPath: string, variant: ZipVariant): string | null {
   const normalized = normalizePath(entryPath);
   if (normalized === null) return null;
   
-  if (variant === 'project') {
-    // Project layout: preserve structure as-is
-    // Root opencode.json* stays at root
-    // .opencode/ directory tree preserved as-is
-    return normalized;
-  } else {
-    // Global layout: remap .opencode/ contents to top-level
-    // Extracting into ~/.config/opencode/ should work directly
-    if (normalized.startsWith('.opencode/')) {
-      // Remove .opencode/ prefix
-      return normalized.slice('.opencode/'.length);
-    } else if (normalized === '.opencode') {
-      // Skip the .opencode directory itself
-      return null;
-    } else {
-      // Root-level files (like opencode.json) stay at root
-      return normalized;
-    }
-  }
+  // Both variants preserve the layout as-is
+  // Project: user extracts to project root
+  // Global: user extracts to ~/.config/opencode/
+  // The actual repo structure IS the config structure
+  return normalized;
 }
 
 /**

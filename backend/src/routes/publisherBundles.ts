@@ -5,11 +5,11 @@ import { dbInstance as db } from '../db/db';
 import { publisherBundle } from '../db/schema/publisher';
 import { eq, and, desc } from 'drizzle-orm';
 import { createGitHubClient, getRepoInfo, getFileContent } from '../github/githubClient';
-import { fetchAndValidateManifest, ManifestValidationError } from '../import/manifest';
+import { fetchAndValidateManifest } from '../import/manifest';
 import { importBundle, getLastImport } from '../import/importer';
 import { importRun } from '../db/schema/imports';
 
-const REPO_NAME_REGEX = /^opendots-[a-z0-9]+(-[a-z0-9]+)*$/;
+const REPO_NAME_REGEX = /^[a-zA-Z0-9._-]{1,100}$/;
 
 export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   fastify.get('/api/publisher/bundles', async (request, reply) => {
@@ -102,7 +102,7 @@ export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         reply.code(400);
         return {
           code: 'INVALID_REPO_NAME',
-          message: 'Repository name must match pattern: opendots-<slug>',
+          message: 'Repository name contains invalid characters',
           field: 'repo',
         };
       }
@@ -149,14 +149,17 @@ export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         repo
       );
 
+      let manifest: any;
       if ('field' in manifestResult) {
-        const validationError = manifestResult as ManifestValidationError;
-        reply.code(400);
-        return {
-          code: 'INVALID_MANIFEST',
-          message: validationError.message,
-          field: validationError.field,
+        // No manifest found — derive metadata from repo
+        manifest = {
+          id: repo,
+          name: repo.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+          summary: repoInfo.description || '',
+          license: repoInfo.license?.spdx_id || 'Unknown',
         };
+      } else {
+        manifest = manifestResult;
       }
 
       const existingBundle = await db.select()
@@ -177,7 +180,6 @@ export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         };
       }
 
-      const manifest = manifestResult as any;
       const insertedBundle = await db.insert(publisherBundle).values({
         publisherAccountId: session.user.id,
         githubOwner: owner,

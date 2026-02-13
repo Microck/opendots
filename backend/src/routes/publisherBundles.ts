@@ -1,0 +1,183 @@
+import { FastifyPluginAsync } from 'fastify';
+import fp from 'fastify-plugin';
+import { auth } from '../auth/auth';
+import { dbInstance as db } from '../db/db';
+import { publisherBundle } from '../db/schema/publisher';
+import { eq, and } from 'drizzle-orm';
+import { createGitHubClient, getRepoInfo, getFileContent } from '../github/githubClient';
+import { fetchAndValidateManifest, ManifestValidationError } from '../import/manifest';
+
+const REPO_NAME_REGEX = /^opendots-[a-z0-9]+(-[a-z0-9]+)*$/;
+
+export const publisherBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
+  fastify.get('/api/publisher/bundles', async (request, reply) => {
+    try {
+      const session = await auth.api.getSession({
+        headers: request.headers as Record<string, string>,
+      });
+
+      if (!session) {
+        reply.code(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const bundles = await db.select()
+        .from(publisherBundle)
+        .where(eq(publisherBundle.publisherAccountId, session.user.id));
+
+      return { bundles };
+    } catch (error) {
+      reply.code(500);
+      return { error: 'Failed to fetch bundles' };
+    }
+  });
+
+  fastify.post('/api/publisher/bundles', async (request, reply) => {
+    try {
+      const session = await auth.api.getSession({
+        headers: request.headers as Record<string, string>,
+      });
+
+      if (!session) {
+        reply.code(401);
+        return { error: 'Unauthorized' };
+      }
+
+      const body = request.body as { repo?: string };
+      const repoInput = body.repo?.trim();
+
+      if (!repoInput) {
+        reply.code(400);
+        return {
+          code: 'MISSING_FIELD',
+          message: 'Repository is required',
+          field: 'repo',
+        };
+      }
+
+      let owner: string;
+      let repo: string;
+      let fullName: string;
+
+      const githubUrlMatch = repoInput.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/?$/);
+      if (githubUrlMatch) {
+        owner = githubUrlMatch[1];
+        repo = githubUrlMatch[2];
+        fullName = `${owner}/${repo}`;
+      } else {
+        const parts = repoInput.split('/');
+        if (parts.length !== 2) {
+          reply.code(400);
+          return {
+            code: 'INVALID_FORMAT',
+            message: 'Repository must be in format "owner/repo" or a GitHub URL',
+            field: 'repo',
+          };
+        }
+        [owner, repo] = parts;
+        fullName = repoInput;
+      }
+
+      if (!REPO_NAME_REGEX.test(repo)) {
+        reply.code(400);
+        return {
+          code: 'INVALID_REPO_NAME',
+          message: 'Repository name must match pattern: opendots-<slug>',
+          field: 'repo',
+        };
+      }
+
+      const account = await db.select().from(require('../db/schema/auth').account).where(
+        eq(require('../db/schema/auth').account.userId, session.user.id)
+      ).limit(1);
+
+      if (!account || !account[0]) {
+        reply.code(401);
+        return { error: 'GitHub account not linked' };
+      }
+
+      const githubAccessToken = account[0].accessToken;
+      if (!githubAccessToken) {
+        reply.code(401);
+        return { error: 'GitHub access token not found' };
+      }
+
+      const octokit = createGitHubClient(githubAccessToken);
+      const repoInfo = await getRepoInfo(octokit, owner, repo);
+
+      if (!repoInfo) {
+        reply.code(404);
+        return {
+          code: 'REPO_NOT_FOUND',
+          message: 'Repository not found or not accessible',
+        };
+      }
+
+      if (!repoInfo.permissions.admin && !repoInfo.permissions.maintain) {
+        reply.code(403);
+        return {
+          code: 'NO_CONTROL',
+          message: 'You must have admin or maintainer permissions on this repository',
+        };
+      }
+
+      const manifestResult = await fetchAndValidateManifest(
+        async (o: string, r: string, path: string) => {
+          return await getFileContent(octokit, o, r, path);
+        },
+        owner,
+        repo
+      );
+
+      if ('field' in manifestResult) {
+        const validationError = manifestResult as ManifestValidationError;
+        reply.code(400);
+        return {
+          code: 'INVALID_MANIFEST',
+          message: validationError.message,
+          field: validationError.field,
+        };
+      }
+
+      const existingBundle = await db.select()
+        .from(publisherBundle)
+        .where(
+          and(
+            eq(publisherBundle.publisherAccountId, session.user.id),
+            eq(publisherBundle.githubRepo, repo)
+          )
+        )
+        .limit(1);
+
+      if (existingBundle.length > 0) {
+        reply.code(409);
+        return {
+          code: 'ALREADY_REGISTERED',
+          message: 'This repository is already registered',
+        };
+      }
+
+      const manifest = manifestResult as any;
+      const insertedBundle = await db.insert(publisherBundle).values({
+        publisherAccountId: session.user.id,
+        githubOwner: owner,
+        githubRepo: repo,
+        githubFullName: fullName,
+        githubRepoId: repoInfo.id,
+        defaultBranch: repoInfo.default_branch,
+        repoHtmlUrl: repoInfo.html_url,
+        manifestJson: JSON.stringify(manifest),
+        status: 'registered',
+      }).returning();
+
+      reply.code(201);
+      return { bundle: insertedBundle[0] };
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      reply.code(500);
+      return { error: 'Failed to register repository' };
+    }
+  });
+}, {
+  name: 'publisher-bundles-route',
+});

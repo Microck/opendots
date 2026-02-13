@@ -6,6 +6,13 @@ import { eq, desc, and } from 'drizzle-orm';
 import { createGitHubClient } from '../github/githubClient';
 import { saveSnapshot, snapshotExists } from '../storage/snapshots';
 import { buildFileIndex } from './fileIndex';
+import { validateSnapshot } from './validator';
+import { scanForRisks } from './riskScanner';
+import { scanForSecrets, SECRET_SCAN_DISCLAIMER } from './secretScanner';
+import AdmZip from 'adm-zip';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 
 const MAX_ZIP_SIZE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 60000;
@@ -88,9 +95,12 @@ export async function importBundle(
       }
 
       const snapshotInfo = await saveSnapshot(bundleId, commitSha, zipBuffer);
-      
+
       // Build file index from the saved snapshot
       const fileIndex = buildFileIndex(snapshotInfo.path);
+
+      // Run safety scans on extracted snapshot
+      const safetyResults = await runSafetyScans(snapshotInfo.path);
 
       await db.insert(snapshot).values({
         bundleId,
@@ -98,6 +108,7 @@ export async function importBundle(
         storagePath: snapshotInfo.path,
         byteSize: snapshotInfo.byteSize,
         fileIndex: JSON.stringify(fileIndex),
+        safetyResults: JSON.stringify(safetyResults),
       });
 
       await db.update(importRun)
@@ -180,4 +191,69 @@ export async function getLastImport(bundleId: string) {
     .limit(1);
 
   return lastImport[0] || null;
+}
+
+interface SafetyResults {
+  validation: {
+    config: { valid: boolean; errors: string[]; warnings: string[] } | null;
+    themes: { file: string; valid: boolean; errors: string[] }[];
+    skills: { file: string; valid: boolean; errors: string[] }[];
+  };
+  riskFlags: {
+    flag: string;
+    description: string;
+    files: string[];
+    severity: 'high' | 'medium' | 'low';
+  }[];
+  secretWarnings: {
+    file: string;
+    line: number;
+    pattern: string;
+    snippet: string;
+  }[];
+  disclaimer: string;
+}
+
+/**
+ * Extract zip and run all safety scans
+ */
+async function runSafetyScans(zipPath: string): Promise<SafetyResults> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'opendots-scan-'));
+
+  try {
+    // Extract zip to temp directory
+    const zip = new AdmZip(zipPath);
+    zip.extractAllTo(tempDir, true);
+
+    // Find the extracted folder (GitHub zips have a root folder)
+    const entries = await fs.readdir(tempDir);
+    const extractedFolder = entries.find(entry => !entry.startsWith('.'));
+
+    if (!extractedFolder) {
+      throw new Error('No extracted folder found in zip');
+    }
+
+    const snapshotContentPath = path.join(tempDir, extractedFolder);
+
+    // Run all scans in parallel
+    const [validation, riskFlags, secretWarnings] = await Promise.all([
+      validateSnapshot(snapshotContentPath),
+      scanForRisks(snapshotContentPath),
+      scanForSecrets(snapshotContentPath),
+    ]);
+
+    return {
+      validation,
+      riskFlags,
+      secretWarnings,
+      disclaimer: SECRET_SCAN_DISCLAIMER,
+    };
+  } finally {
+    // Clean up temp directory
+    try {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    } catch (cleanupError) {
+      console.error('Failed to clean up temp directory:', cleanupError);
+    }
+  }
 }

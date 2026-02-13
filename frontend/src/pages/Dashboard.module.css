@@ -96,6 +96,19 @@
   background: rgba(0,0,0,0.2);
 }
 
+.chipFailure {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid #ff6b6b;
+  border-radius: 0;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #ff6b6b;
+  background: rgba(0,0,0,0.2);
+}
+
 .actionBtn {
   font-family: var(--font-body);
   text-transform: uppercase;
@@ -105,5 +118,14 @@
   font-weight: 600;
   text-decoration: underline;
   cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
 }
 .actionBtn:hover { color: var(--text-main); }
+.actionBtn:disabled {
+  color: var(--text-muted);
+  opacity: 0.5;
+  cursor: not-allowed;
+  text-decoration: none;
+}

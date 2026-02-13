@@ -27,12 +27,15 @@ export default function Docs() {
               <pre className={styles.codeBlock}>
 {`my-opencode-config/
 ├── opencode.json         # OpenCode configuration (JSONC)
+├── dcp.jsonc             # Dynamic Context Pruning config
 ├── AGENTS.md             # Agent instructions/rules
 ├── agent/                # Agent definitions (.md files)
 ├── command/              # Slash commands (.md files)
-├── plugins/              # TypeScript plugins
+├── plugins/              # Active TypeScript plugins
+├── disabled-plugins/     # Inactive plugins (kept for reference)
 ├── skills/               # Skill definitions (SKILL.md)
 ├── tools/                # Custom tools
+├── disabled-tools/       # Inactive tools
 ├── prompts/              # Prompt templates
 ├── themes/               # Color themes (.json)
 ├── scripts/              # Utility scripts

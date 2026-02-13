@@ -48,7 +48,8 @@ function getFileKind(filePath: string): FileIndexEntry['kind'] {
   
   // Config files at root
   if (fileNameLower === 'opencode.json' || fileNameLower === 'opencode.jsonc' || 
-      fileNameLower === 'opendots.yml' || fileNameLower === 'opendots.yaml') {
+      fileNameLower === 'opendots.yml' || fileNameLower === 'opendots.yaml' ||
+      fileNameLower === 'dcp.jsonc' || fileNameLower === 'dcp.json') {
     return 'config';
   }
   
@@ -72,13 +73,13 @@ function getFileKind(filePath: string): FileIndexEntry['kind'] {
     return 'command';
   }
   
-  // Plugin files - under plugins/ or .opencode/plugins/
-  if (normalizedPath.match(/^(\.opencode\/)?plugins?\//)) {
+  // Plugin files - under plugins/ or .opencode/plugins/ or disabled-plugins/
+  if (normalizedPath.match(/^(\.opencode\/)?plugins?\//) || normalizedPath.match(/^disabled-plugins?\//)) {
     return 'plugin';
   }
   
-  // Tool files - under tools/ or .opencode/tools/
-  if (normalizedPath.match(/^(\.opencode\/)?tools?\//)) {
+  // Tool files - under tools/ or .opencode/tools/ or disabled-tools/
+  if (normalizedPath.match(/^(\.opencode\/)?tools?\//) || normalizedPath.match(/^disabled-tools?\//)) {
     return 'tool';
   }
   

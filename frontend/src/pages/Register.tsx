@@ -102,8 +102,8 @@ export default function Register() {
               </span>
               <ul className={styles.requirementList}>
                 <li>Repo public access</li>
-                <li><code>opencode.json</code> or <code>opendots.yml</code> at root (recommended)</li>
-                <li>Valid JSON/YAML syntax in config files</li>
+                <li>You must have admin or maintain permissions on the repo</li>
+                <li>No special naming or manifest file required</li>
               </ul>
             </div>
 

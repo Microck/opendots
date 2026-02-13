@@ -1,39 +1,204 @@
 .explorer {
   display: grid;
-  grid-template-columns: 250px 1fr;
+  grid-template-columns: 280px 1fr;
   height: 500px;
   border: 1px solid var(--border-light);
-  background: rgba(0,0,0,0.3);
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  overflow: hidden;
 }
 
 .fileTree {
   border-right: 1px solid var(--border-light);
-  padding: var(--space-md);
+  padding: var(--space-sm);
   overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.fileItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  color: var(--text-muted);
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fileItem:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.fileItem.active {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.fileItem.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fileItem.disabled:hover {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.fileIcon {
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.fileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.binaryTag {
+  font-size: 0.6rem;
+  padding: 1px 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.codeView {
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.fileHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.3);
+  border-bottom: 1px solid var(--border-light);
   font-family: var(--font-mono);
   font-size: 0.8rem;
 }
 
-.fileItem {
-  padding: 4px 8px;
-  cursor: pointer;
-  color: var(--text-muted);
-}
-.fileItem:hover, .fileItem.active {
+.filePath {
   color: var(--text-main);
-  background: rgba(255,255,255,0.1);
 }
 
-.codeView {
-  padding: var(--space-md);
-  overflow: auto;
+.fileSize {
+  color: var(--text-dim);
+  font-size: 0.75rem;
+}
+
+.codePre {
+  margin: 0;
+  padding: 16px;
   font-family: var(--font-mono);
-  font-size: 0.85rem;
-  color: #d4d4d4;
-  background: rgba(0,0,0,0.2);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  overflow: auto;
+  flex: 1;
 }
 
-.codeView pre {
-  white-space: pre-wrap;
-  word-break: break-word;
+.codePre > div {
+  display: flex;
+  gap: 16px;
+}
+
+.lineNumber {
+  color: var(--text-dim);
+  text-align: right;
+  min-width: 30px;
+  user-select: none;
+  opacity: 0.5;
+}
+
+.markdownContent {
+  padding: 16px;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  overflow: auto;
+  flex: 1;
+}
+
+.markdownContent :global(h1),
+.markdownContent :global(h2),
+.markdownContent :global(h3),
+.markdownContent :global(h4) {
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  color: var(--text-main);
+}
+
+.markdownContent :global(p) {
+  margin-bottom: 1em;
+  color: var(--text-body);
+}
+
+.markdownContent :global(code) {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+}
+
+.markdownContent :global(pre) {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 16px;
+  border-radius: 4px;
+  overflow-x: auto;
+}
+
+.markdownContent :global(pre code) {
+  background: transparent;
+  padding: 0;
+}
+
+.markdownContent :global(ul),
+.markdownContent :global(ol) {
+  margin-bottom: 1em;
+  padding-left: 2em;
+}
+
+.markdownContent :global(li) {
+  margin-bottom: 0.25em;
+}
+
+.markdownContent :global(a) {
+  color: var(--accent-primary);
+  text-decoration: none;
+}
+
+.markdownContent :global(a:hover) {
+  text-decoration: underline;
+}
+
+.markdownContent :global(hr) {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: 1.5em 0;
+}
+
+.loading,
+.error,
+.selectFile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  padding: 24px;
+  text-align: center;
+}
+
+.error {
+  color: #ff6b6b;
 }

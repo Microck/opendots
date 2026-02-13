@@ -5,6 +5,7 @@ import { publisherBundle } from '../db/schema/publisher';
 import { snapshot, importRun } from '../db/schema/imports';
 import { eq, desc, sql } from 'drizzle-orm';
 import { extractFileFromZip } from '../import/fileIndex';
+import { generateZipStream, isValidVariant } from '../import/zipGenerator';
 import fs from 'fs/promises';
 
 const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
@@ -115,13 +116,14 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const bundleData = bundle[0];
 
-      // Get latest snapshot with file index
+      // Get latest snapshot with file index and safety results
       const latestSnapshot = await db.select({
         commitSha: snapshot.commitSha,
         createdAt: snapshot.createdAt,
         storagePath: snapshot.storagePath,
         fileIndex: snapshot.fileIndex,
         byteSize: snapshot.byteSize,
+        safetyResults: snapshot.safetyResults,
       })
         .from(snapshot)
         .where(eq(snapshot.bundleId, id))
@@ -143,6 +145,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       let manifest = null;
       let fileIndex = null;
+      let safetyResults = null;
 
       try {
         if (bundleData.manifestJson) {
@@ -158,6 +161,14 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         }
       } catch {
         // Invalid file index JSON
+      }
+
+      try {
+        if (latestSnapshot[0]?.safetyResults) {
+          safetyResults = JSON.parse(latestSnapshot[0].safetyResults);
+        }
+      } catch {
+        // Invalid safety results JSON
       }
 
       return {
@@ -178,6 +189,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           byteSize: latestSnapshot[0].byteSize,
         } : null,
         fileIndex: fileIndex || [],
+        safetyResults: safetyResults,
         lastImport: lastImport[0] ? {
           commitSha: lastImport[0].commitSha,
           status: lastImport[0].status,
@@ -282,6 +294,84 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       console.error('Failed to fetch file:', error);
       reply.code(500);
       return { error: 'Failed to fetch file' };
+    }
+  });
+
+  // Download bundle as ZIP (project or global layout)
+  fastify.get('/api/bundles/:id/download', async (request, reply) => {
+    try {
+      const { id } = request.params as { id: string };
+      const { variant } = request.query as { variant?: string };
+
+      // Validate variant parameter
+      if (!variant) {
+        reply.code(400);
+        return { error: 'Missing variant parameter. Use ?variant=project or ?variant=global' };
+      }
+
+      if (!isValidVariant(variant)) {
+        reply.code(400);
+        return { error: 'Invalid variant. Must be "project" or "global"' };
+      }
+
+      // Get the bundle to verify it exists and get slug for filename
+      const bundle = await db.select({
+        id: publisherBundle.id,
+        githubRepo: publisherBundle.githubRepo,
+      })
+        .from(publisherBundle)
+        .where(eq(publisherBundle.id, id))
+        .limit(1);
+
+      if (!bundle || bundle.length === 0) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
+
+      const bundleData = bundle[0];
+
+      // Get the latest snapshot for this bundle
+      const latestSnapshot = await db.select({
+        storagePath: snapshot.storagePath,
+        safetyResults: snapshot.safetyResults,
+      })
+        .from(snapshot)
+        .where(eq(snapshot.bundleId, id))
+        .orderBy(desc(snapshot.createdAt))
+        .limit(1);
+
+      if (!latestSnapshot || latestSnapshot.length === 0) {
+        reply.code(404);
+        return { error: 'No snapshot found for this bundle' };
+      }
+
+      const snapshotData = latestSnapshot[0];
+
+      // Verify the snapshot file exists
+      try {
+        await fs.access(snapshotData.storagePath);
+      } catch {
+        reply.code(404);
+        return { error: 'Snapshot file not found' };
+      }
+
+      // Generate the ZIP stream
+      const { stream, filename } = generateZipStream(
+        snapshotData.storagePath,
+        variant,
+        bundleData.githubRepo
+      );
+
+      // Set response headers
+      reply.header('Content-Type', 'application/zip');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+
+      // Return the stream
+      return stream;
+    } catch (error) {
+      console.error('Failed to generate download:', error);
+      reply.code(500);
+      return { error: 'Failed to generate download' };
     }
   });
 }, {

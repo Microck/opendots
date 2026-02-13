@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 2 of 3 (Great Bundle Pages + Safety + Downloads)
-Plan: 2 of 3 in current phase (02-02 complete, ready for 02-03)
+Plan: 2 of 3 in current phase (02-01 ✓, 02-02 ✓, ready for 02-03)
 Status: Wave 1 complete (02-01 ∥ 02-02 done), ready for 02-03
-Last activity: 2026-02-13 — Completed plan 02-02 (18 min duration)
+Last activity: 2026-02-13 — Completed plan 02-01 (15 min duration)
 
 Progress: [████░░░░░░] 50%
 
@@ -21,7 +21,7 @@ Progress: [████░░░░░░] 50%
 | Phase | Plans | Waves | Status |
 |-------|-------|-------|--------|
 | 1. Publisher Import Pipeline | 3 | 3 (sequential) | 01-01 ✓, 01-02 ✓, 01-03 ✓ |
-| 2. Great Bundle Pages + Safety + Downloads | 3 | 2 (02-01 ∥ 02-02, then 02-03) | 02-02 ✓ |
+| 2. Great Bundle Pages + Safety + Downloads | 3 | 2 (02-01 ∥ 02-02, then 02-03) | 02-01 ✓, 02-02 ✓ |
 | 3. Discovery Browse | 2 | 2 (sequential) | Planned |
 
 **Total: 8 plans across 3 phases**
@@ -31,7 +31,7 @@ Progress: [████░░░░░░] 50%
 **Scaffolding:** Complete (all 7 pages + 4 reusable components)
 **Stack:** Vite + React 19 + TypeScript + React Router + CSS Modules
 **Location:** `frontend/`
-**State:** Backend integration complete (auth + registration + imports), Dashboard displays real data. Safety scanning ready for detail page.
+**State:** Backend integration complete (auth + registration + imports), Dashboard displays real data. Detail page renders real bundle data with file tree and syntax-highlighted previews.
 **Dev server:** `npm run dev` in `frontend/` (port 5173)
 
 ## Performance Metrics
@@ -46,7 +46,7 @@ Progress: [████░░░░░░] 50%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 1 | 3 of 3 | 25 min | ✓ |
-| 2 | 1 of 3 | 18 min | — |
+| 2 | 2 of 3 | 33 min | — |
 
 ## Accumulated Context
 
@@ -69,6 +69,8 @@ Recent decisions affecting current work:
 - **JSON text column for safety results** - Flexible storage without schema migrations (Plan 02-02)
 - **Best-effort secret scanning with regex** - Simpler than gitleaks CLI for v1; explicit disclaimers (Plan 02-02)
 - **Never block import on scan failures** - Always produce snapshot; safety results are metadata (Plan 02-02)
+- **File index stored as JSON in DB** - Fast reads vs extracting on every request (Plan 02-01)
+- **100KB max preview size** - Prevents browser performance issues with large files (Plan 02-01)
 
 ### Pending Todos
 
@@ -81,5 +83,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed plan 02-02 (Import-time validation + risk + secret scanning), Phase 2 Wave 1 complete
-Resume file: .planning/phases/02-great-bundle-pages-safety-downloads/02-02-SUMMARY.md
+Stopped at: Completed plan 02-01 (Bundle detail page with real data + file previews), Phase 2 Wave 1 complete
+Resume file: .planning/phases/02-great-bundle-pages-safety-downloads/02-01-SUMMARY.md

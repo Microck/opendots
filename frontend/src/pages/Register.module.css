@@ -1,0 +1,84 @@
+.page {
+  padding-top: var(--space-2xl);
+  padding-bottom: var(--space-2xl);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.backLink {
+  display: block;
+  margin-bottom: var(--space-lg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.backLink:hover { color: var(--text-main); }
+
+.formContainer {
+  max-width: 600px;
+  margin: 0 auto;
+  border: 1px solid var(--border-light);
+  padding: var(--space-xl);
+  text-align: left;
+  background: var(--bg-card);
+}
+
+.formGroup {
+  margin-bottom: var(--space-lg);
+}
+
+.inputText {
+  width: 100%;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border-light);
+  padding: 10px;
+  color: var(--text-main);
+  font-family: var(--font-mono);
+  margin-top: 6px;
+}
+.inputText:focus {
+  border-color: #fff;
+  outline: none;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.requirements {
+  background: rgba(255,255,255,0.03);
+  padding: var(--space-md);
+  border: 1px solid var(--border-light);
+  margin-bottom: var(--space-lg);
+}
+
+.requirementList {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding-left: 20px;
+  list-style: disc;
+}
+
+.btnPrimary {
+  background: #FFFFFF;
+  color: var(--bg-body);
+  padding: 8px 24px;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  border: 1px solid #FFFFFF;
+  cursor: pointer;
+}
+.btnPrimary:hover {
+  background: transparent;
+  color: #FFFFFF;
+}

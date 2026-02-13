@@ -1,0 +1,109 @@
+.page {
+  padding-top: var(--space-2xl);
+  padding-bottom: var(--space-2xl);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xl);
+}
+
+.btnPrimary {
+  background: #FFFFFF;
+  color: var(--bg-body);
+  padding: 8px 24px;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  border: 1px solid #FFFFFF;
+  cursor: pointer;
+}
+.btnPrimary:hover {
+  background: transparent;
+  color: #FFFFFF;
+}
+
+.table {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  padding: 0;
+}
+
+.tableHeader {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-light);
+  background: rgba(0,0,0,0.2);
+}
+
+.tableRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--border-light);
+  align-items: center;
+}
+
+.tableRowLast {
+  border-bottom: none;
+}
+
+.bundleName {
+  display: block;
+}
+
+.repoLink {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.chipSuccess {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid #4caf50;
+  border-radius: 0;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #4caf50;
+  background: rgba(0,0,0,0.2);
+}
+
+.chipPending {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border: 1px solid #ff9800;
+  border-radius: 0;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #ff9800;
+  background: rgba(0,0,0,0.2);
+}
+
+.actionBtn {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.actionBtn:hover { color: var(--text-main); }

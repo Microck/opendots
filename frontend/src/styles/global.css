@@ -1,0 +1,104 @@
+:root {
+  --bg-body: #0a2590;
+  --bg-card: rgba(10, 37, 144, 0.4);
+  --bg-surface: #061860;
+
+  --text-main: #FFFFFF;
+  --text-muted: #8ca5ff;
+  --text-dim: #546eb5;
+
+  --border-light: rgba(255, 255, 255, 0.25);
+  --border-hover: #FFFFFF;
+  --border-active: #80dcff;
+
+  --radius-sm: 0px;
+  --radius-md: 0px;
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 48px;
+  --space-2xl: 80px;
+
+  --font-display: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Space Mono', monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background-color: var(--bg-body);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+  background-size: 60px 60px;
+  background-position: center top;
+  color: var(--text-main);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+a { text-decoration: none; color: inherit; cursor: pointer; }
+ul { list-style: none; }
+button { cursor: pointer; border: none; background: none; font-family: inherit; color: inherit; }
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+h1 { font-size: 3.5rem; letter-spacing: -0.03em; }
+h2 { font-size: 2rem; }
+h3 { font-size: 1.25rem; font-weight: 500; }
+
+.text-mono { font-family: var(--font-mono); font-size: 0.8rem; letter-spacing: 0.05em; }
+.text-label {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-lg);
+  width: 100%;
+  position: relative;
+  z-index: 2;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-body);
+  border-left: 1px solid var(--border-light);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border: 1px solid var(--bg-body);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}

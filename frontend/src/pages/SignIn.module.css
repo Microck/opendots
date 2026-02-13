@@ -1,0 +1,47 @@
+.page {
+  padding-top: var(--space-2xl);
+  padding-bottom: var(--space-2xl);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.authContainer {
+  max-width: 400px;
+  margin: 0 auto;
+  border: 1px solid var(--border-light);
+  padding: var(--space-xl);
+  text-align: center;
+  background: var(--bg-card);
+}
+
+.description {
+  color: var(--text-muted);
+  margin-bottom: var(--space-lg);
+}
+
+.btnPrimary {
+  background: #FFFFFF;
+  color: var(--bg-body);
+  padding: 8px 24px;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  border: 1px solid #FFFFFF;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.btnPrimary:hover {
+  background: transparent;
+  color: #FFFFFF;
+}

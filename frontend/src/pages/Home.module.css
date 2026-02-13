@@ -1,0 +1,194 @@
+.page {
+  padding-top: var(--space-2xl);
+  padding-bottom: var(--space-2xl);
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.hero {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 60px 0 100px;
+  position: relative;
+}
+
+.hero::before {
+  content: '';
+  position: absolute;
+  top: 45%; left: 50%;
+  transform: translate(-50%, -50%) rotate(-5deg);
+  width: 800px; height: 300px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  top: 45%; left: 50%;
+  transform: translate(-50%, -50%) rotate(5deg);
+  width: 1000px; height: 400px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.archWindow {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--border-light);
+  margin-bottom: var(--space-xl);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.archWindow::after {
+  content: '';
+  position: absolute;
+  inset: 10px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 50%;
+}
+.archWindow::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.2) 0%, transparent 70%);
+  opacity: 0.5;
+}
+
+.archStar {
+  font-size: 2rem;
+  color: var(--text-main);
+  position: relative;
+  z-index: 2;
+  opacity: 0.8;
+}
+
+.verticalDeco {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--border-light);
+  letter-spacing: 0.2em;
+}
+.leftDeco {
+  left: 0;
+  border-right: 1px solid var(--border-light);
+  padding-right: 10px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+.rightDeco {
+  right: 0;
+  border-left: 1px solid var(--border-light);
+  padding-left: 10px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.heroTitle {
+  margin-bottom: var(--space-sm);
+}
+
+.heroSubtitle {
+  font-size: 0.5em;
+  font-family: var(--font-body);
+  letter-spacing: 0.1em;
+  display: block;
+  margin-top: 10px;
+  color: var(--text-muted);
+}
+
+.heroDescription {
+  max-width: 500px;
+  margin: var(--space-lg) auto;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.heroCtas {
+  display: flex;
+  gap: var(--space-md);
+  margin-top: var(--space-lg);
+}
+
+.btnPrimary {
+  background: #FFFFFF;
+  color: var(--bg-body);
+  padding: 8px 24px;
+  border-radius: 0;
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  transition: all 0.2s;
+  border: 1px solid #FFFFFF;
+  cursor: pointer;
+}
+.btnPrimary:hover {
+  background: transparent;
+  color: #FFFFFF;
+}
+
+.btnOutline {
+  border: 1px solid #fff;
+  padding: 8px 20px;
+  border-radius: 0;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  transition: all 0.2s;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+.btnOutline:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.decoLine {
+  height: 1px;
+  background: var(--border-light);
+  width: 100%;
+  margin: var(--space-lg) 0;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--space-lg);
+}
+
+.sectionTitle {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-size: 1rem;
+  color: #fff;
+  font-weight: 600;
+}
+
+.bundleGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: var(--space-md);
+}

@@ -218,64 +218,7 @@ async function validateThemeFiles(snapshotPath: string): Promise<ThemeValidation
 }
 
 /**
- * Recursively find and validate SKILL.md files in a directory.
- * Skills are typically at skills/<name>/SKILL.md (one level deep),
- * but we handle arbitrary nesting.
- */
-async function findAndValidateSkillFiles(
-  dir: string,
-  snapshotPath: string,
-  results: SkillValidationResult[],
-  maxDepth = 3,
-  currentDepth = 0
-): Promise<void> {
-  if (currentDepth > maxDepth) return;
-
-  try {
-    await fs.access(dir);
-    const entries = await fs.readdir(dir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-
-      if (entry.isFile() && entry.name === 'SKILL.md') {
-        const relativePath = path.relative(snapshotPath, fullPath);
-
-        try {
-          const content = await fs.readFile(fullPath, 'utf-8');
-          const parsed = matter(content);
-          const errors: string[] = [];
-
-          for (const field of SKILL_REQUIRED_FIELDS) {
-            if (!parsed.data[field] || parsed.data[field].trim?.() === '') {
-              errors.push(`Missing or empty required frontmatter field: ${field}`);
-            }
-          }
-
-          results.push({
-            file: relativePath,
-            valid: errors.length === 0,
-            errors,
-          });
-        } catch (parseError) {
-          results.push({
-            file: relativePath,
-            valid: false,
-            errors: [`Failed to parse frontmatter: ${(parseError as Error).message}`],
-          });
-        }
-      } else if (entry.isDirectory() && !entry.name.startsWith('.')) {
-        await findAndValidateSkillFiles(fullPath, snapshotPath, results, maxDepth, currentDepth + 1);
-      }
-    }
-  } catch {
-    // Directory doesn't exist, skip
-  }
-}
-
-/**
- * Validates SKILL.md files for proper frontmatter.
- * Recurses into subdirectories since skills are typically at skills/<name>/SKILL.md
+ * Validates SKILL.md files for proper frontmatter
  */
 async function validateSkillFiles(snapshotPath: string): Promise<SkillValidationResult[]> {
   const results: SkillValidationResult[] = [];
@@ -287,7 +230,44 @@ async function validateSkillFiles(snapshotPath: string): Promise<SkillValidation
   ];
 
   for (const skillDir of skillDirs) {
-    await findAndValidateSkillFiles(skillDir, snapshotPath, results);
+    try {
+      await fs.access(skillDir);
+      const entries = await fs.readdir(skillDir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isFile() && entry.name === 'SKILL.md') {
+          const filePath = path.join(skillDir, entry.name);
+          const relativePath = path.relative(snapshotPath, filePath);
+
+          try {
+            const content = await fs.readFile(filePath, 'utf-8');
+            const parsed = matter(content);
+            const errors: string[] = [];
+
+            // Check required fields
+            for (const field of SKILL_REQUIRED_FIELDS) {
+              if (!parsed.data[field] || parsed.data[field].trim?.() === '') {
+                errors.push(`Missing or empty required frontmatter field: ${field}`);
+              }
+            }
+
+            results.push({
+              file: relativePath,
+              valid: errors.length === 0,
+              errors,
+            });
+          } catch (parseError) {
+            results.push({
+              file: relativePath,
+              valid: false,
+              errors: [`Failed to parse frontmatter: ${(parseError as Error).message}`],
+            });
+          }
+        }
+      }
+    } catch {
+      // Directory doesn't exist, skip
+    }
   }
 
   // Also check for SKILL.md at root level
@@ -320,8 +300,7 @@ async function validateSkillFiles(snapshotPath: string): Promise<SkillValidation
  * Utility to check if a file is a valid config file
  */
 export function isConfigFile(filename: string): boolean {
-  return filename === 'opencode.json' || filename === 'opencode.jsonc' ||
-    filename === 'dcp.json' || filename === 'dcp.jsonc';
+  return filename === 'opencode.json' || filename === 'opencode.jsonc';
 }
 
 /**

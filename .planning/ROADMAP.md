@@ -17,8 +17,8 @@ Opendots ships in three coherent phases: first establish trusted publishing via 
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [x] **Phase 1: Publisher Import Pipeline** - Publishers can sign in, register repos, and produce stable snapshot data.
-- [x] **Phase 2: Great Bundle Pages + Safety + Downloads** - Visitors can confidently evaluate a bundle before installing it.
+- [ ] **Phase 1: Publisher Import Pipeline** - Publishers can sign in, register repos, and produce stable snapshot data.
+- [ ] **Phase 2: Great Bundle Pages + Safety + Downloads** - Visitors can confidently evaluate a bundle before installing it.
 - [ ] **Phase 3: Discovery Browse** - Visitors can find bundles via cards, search, filters, and sorting.
 
 ## Phase Details
@@ -30,14 +30,14 @@ Opendots ships in three coherent phases: first establish trusted publishing via 
 **Frontend context**: SignIn, Register, and Dashboard pages exist with static mock data. This phase wires them to a real backend (GitHub OAuth, repo validation API, import API).
 **Success Criteria** (what must be TRUE):
   1. Publisher can sign in with GitHub OAuth and remains signed in after a browser refresh.
-  2. Publisher can register a GitHub repo they control; invalid repos are rejected with a clear error. (Naming is flexible; manifest is optional.)
+  2. Publisher can register a GitHub repo they control; invalid repo name or missing/invalid `opendots.yml` is rejected with a clear error.
   3. System imports bundle files and snapshots them; publisher can trigger a refresh and see success/failure plus the last imported commit + timestamp.
 **Plans**: 3 plans in 3 waves
 
 Plans:
-- [x] 01-01: Auth + session persistence (GitHub OAuth) — Wave 1
-- [x] 01-02: Repo registration + manifest/naming validation — Wave 2
-- [x] 01-03: Import + snapshot + manual refresh + import metadata — Wave 3
+- [ ] 01-01: Auth + session persistence (GitHub OAuth) — Wave 1
+- [ ] 01-02: Repo registration + manifest/naming validation — Wave 2
+- [ ] 01-03: Import + snapshot + manual refresh + import metadata — Wave 3
 
 ### Phase 2: Great Bundle Pages + Safety + Downloads
 **Goal**: Visitors can understand bundle contents, see safety signals, and download/install the bundle in supported layouts.
@@ -53,9 +53,9 @@ Plans:
 **Plans**: 3 plans in 2 waves
 
 Plans:
-- [x] 02-01: Bundle detail page (file tree, previews, metadata, repo link) — Wave 1
-- [x] 02-02: Import-time validation + risk scanning + secret scanning — Wave 1
-- [x] 02-03: Safety display + ZIP downloads + install instructions + docs page — Wave 2
+- [ ] 02-01: Bundle detail page (file tree, previews, metadata, repo link) — Wave 1
+- [ ] 02-02: Import-time validation + risk scanning + secret scanning — Wave 1
+- [ ] 02-03: Safety display + ZIP downloads + install instructions + docs page — Wave 2
 
 ### Phase 3: Discovery Browse
 **Goal**: Visitors can discover relevant bundles quickly using cards, search, filters, and sorting.
@@ -79,6 +79,6 @@ Phases execute in numeric order.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Publisher Import Pipeline | 3/3 | Complete | 2026-02-13 |
-| 2. Great Bundle Pages + Safety + Downloads | 3/3 | Complete | 2026-02-13 |
+| 1. Publisher Import Pipeline | 3/3 | Complete | ✓ |
+| 2. Great Bundle Pages + Safety + Downloads | 0/3 | Planned | - |
 | 3. Discovery Browse | 0/2 | Planned | - |

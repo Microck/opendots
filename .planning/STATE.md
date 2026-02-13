@@ -5,47 +5,48 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** People can quickly find and confidently evaluate OpenCode bundles before installing them.
+**Current focus:** Phase 1 - Publisher Import Pipeline
 
 ## Current Position
 
-Phase: 2 of 3 complete — ready for Phase 3 (Discovery Browse)
-Plan: All Phase 2 plans done (02-01 ✓, 02-02 ✓, 02-03 ✓)
-Status: Phase 2 complete + real-world alignment fixes applied
-Last activity: 2026-02-13 — Completed Phase 2 and aligned with real-world OpenCode repos
+Phase: 2 of 3 (Great Bundle Pages + Safety + Downloads)
+Plan: 2 of 3 in current phase (02-01 ✓, 02-02 ✓, ready for 02-03)
+Status: Wave 1 complete (02-01 ∥ 02-02 done), ready for 02-03
+Last activity: 2026-02-13 — Completed plan 02-01 (15 min duration)
 
-Progress: [███████░░░] 74%
+Progress: [████░░░░░░] 50%
 
 ## Planning Summary
 
 | Phase | Plans | Waves | Status |
 |-------|-------|-------|--------|
-| 1. Publisher Import Pipeline | 3 | 3 (sequential) | ✓ Complete |
-| 2. Great Bundle Pages + Safety + Downloads | 3 | 2 (02-01 ∥ 02-02, then 02-03) | ✓ Complete |
+| 1. Publisher Import Pipeline | 3 | 3 (sequential) | 01-01 ✓, 01-02 ✓, 01-03 ✓ |
+| 2. Great Bundle Pages + Safety + Downloads | 3 | 2 (02-01 ∥ 02-02, then 02-03) | 02-01 ✓, 02-02 ✓ |
 | 3. Discovery Browse | 2 | 2 (sequential) | Planned |
 
-**Total: 8 plans across 3 phases (6 complete, 2 remaining)**
+**Total: 8 plans across 3 phases**
 
 ## Frontend Status
 
 **Scaffolding:** Complete (all 7 pages + 4 reusable components)
 **Stack:** Vite + React 19 + TypeScript + React Router + CSS Modules
 **Location:** `frontend/`
-**State:** Phases 1–2 wired. Auth, registration, imports, dashboard, bundle detail (file tree + syntax-highlighted previews), safety display (risk badges + disclaimer), download cards, docs page — all functional.
+**State:** Backend integration complete (auth + registration + imports), Dashboard displays real data. Detail page renders real bundle data with file tree and syntax-highlighted previews.
 **Dev server:** `npm run dev` in `frontend/` (port 5173)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 6
-- Average duration: ~10 min
-- Total execution time: ~1 hour
+- Total plans completed: 5
+- Average duration: 10.8 min
+- Total execution time: 0.9 hours
 
 **By Phase:**
 
-| Phase | Plans | Total | Status |
-|-------|-------|-------|--------|
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
 | 1 | 3 of 3 | 25 min | ✓ |
-| 2 | 3 of 3 | 40 min | ✓ |
+| 2 | 2 of 3 | 33 min | — |
 
 ## Accumulated Context
 
@@ -70,30 +71,17 @@ Recent decisions affecting current work:
 - **Never block import on scan failures** - Always produce snapshot; safety results are metadata (Plan 02-02)
 - **File index stored as JSON in DB** - Fast reads vs extracting on every request (Plan 02-01)
 - **100KB max preview size** - Prevents browser performance issues with large files (Plan 02-01)
-- **Streaming ZIPs with archiver** - On-demand streaming, no temp files (Plan 02-03)
-- **Both ZIP variants preserve repo layout** - Real repos use root-level dirs, not `.opencode/` (Real-world fix)
-
-### Real-World Alignment (Post-Phase 2)
-
-After analyzing `remorses/opencode-config` (a real published OpenCode config repo), 6 wrong assumptions were fixed:
-
-1. **Repo naming**: Relaxed from `opendots-<slug>` to any valid GitHub repo name
-2. **Manifest**: Made optional — metadata derived from GitHub API when absent
-3. **Directory structure**: Real repos use root-level dirs (`agent/`, `command/`, `plugins/`, `skills/`, `prompts/`, `scripts/`), not `.opencode/`
-4. **Config schema**: Updated to match real `opencode.json` fields (`$schema`, `theme`, `model`, `provider`, `plugin`, `mcp`, `permission`, `agent`)
-5. **Theme schema**: Fixed to flat color properties (`primary`, `secondary`, `accent`, `text`, `textMuted`, `background`)
-6. **File kind taxonomy**: Expanded from 6 to 12 types (added `agent`, `command`, `plugin`, `tool`, `prompt`, `mode`)
 
 ### Pending Todos
 
-None.
+None yet.
 
 ### Blockers/Concerns
 
-None.
+None yet.
 
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Phase 2 fully complete, planning docs updated, ready for Phase 3
-Resume: Begin Phase 3 planning (Discovery Browse) — 2 plans across 2 waves
+Stopped at: Completed plan 02-01 (Bundle detail page with real data + file previews), Phase 2 Wave 1 complete
+Resume file: .planning/phases/02-great-bundle-pages-safety-downloads/02-01-SUMMARY.md

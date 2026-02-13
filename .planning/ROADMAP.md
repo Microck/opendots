@@ -79,6 +79,6 @@ Phases execute in numeric order.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Publisher Import Pipeline | 0/3 | Planned | - |
+| 1. Publisher Import Pipeline | 3/3 | Complete | ✓ |
 | 2. Great Bundle Pages + Safety + Downloads | 0/3 | Planned | - |
 | 3. Discovery Browse | 0/2 | Planned | - |

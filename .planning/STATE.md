@@ -12,7 +12,7 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 Phase: 1 of 3 (Publisher Import Pipeline)
 Plan: 2 of 3 in current phase
 Status: Wave 2 complete, ready for plan 03
-Last activity: 2026-02-13 — Completed plan 02 (7 min duration)
+Last activity: 2026-02-13 — Completed plan 03 (6 min duration)
 
 Progress: [███░░░░░░░] 67%
 
@@ -20,7 +20,7 @@ Progress: [███░░░░░░░] 67%
 
 | Phase | Plans | Waves | Status |
 |-------|-------|-------|--------|
-| 1. Publisher Import Pipeline | 3 | 3 (sequential) | 01-01 ✓, 01-02 ✓, 01-03 ○ |
+| 1. Publisher Import Pipeline | 3 | 3 (sequential) | 01-01 ✓, 01-02 ✓, 01-03 ✓ |
 | 2. Great Bundle Pages + Safety + Downloads | 3 | 2 (02-01 ∥ 02-02, then 02-03) | Planned |
 | 3. Discovery Browse | 2 | 2 (sequential) | Planned |
 
@@ -31,21 +31,21 @@ Progress: [███░░░░░░░] 67%
 **Scaffolding:** Complete (all 7 pages + 4 reusable components)
 **Stack:** Vite + React 19 + TypeScript + React Router + CSS Modules
 **Location:** `frontend/`
-**State:** Static mock data only; no backend integration
+**State:** Backend integration complete (auth + registration + imports), Dashboard displays real data
 **Dev server:** `npm run dev` in `frontend/` (port 5173)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 9.5 min
-- Total execution time: 0.32 hours
+- Total plans completed: 3
+- Average duration: 8.3 min
+- Total execution time: 0.5 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 1 | 2 of 3 | 9.5 min | - |
+| 1 | 3 of 3 | 8.3 min | ✓ |
 
 ## Accumulated Context
 
@@ -61,6 +61,9 @@ Recent decisions affecting current work:
 - **Better Auth instead of NextAuth/Clerk** - Simpler setup, built-in Drizzle adapter, no vendor lock-in (Plan 01-01)
 - **Cookie-based sessions** - Better Auth built-in cookie management, simpler SPA integration (Plan 01-01)
 - **Vite proxy for /api** - Eliminates CORS complexity in development (Plan 01-01)
+- **Synchronous refresh in v1** - API waits for import completion; simpler than background jobs (Plan 01-03)
+- **Local filesystem snapshot storage** - Store zips under backend/storage/snapshots; avoids cloud complexity (Plan 01-03)
+- **25MB max zip + 60s timeout** - Prevents abuse and large repo imports (Plan 01-03)
 
 ### Pending Todos
 
@@ -73,5 +76,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-13
-Stopped at: Completed plan 02 (Publisher Registration with GitHub OAuth and Manifest Validation)
+Stopped at: Completed plan 03 (Import + Snapshot + Manual Refresh), Phase 1 complete
 Resume file: None

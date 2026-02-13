@@ -16,25 +16,27 @@ export default function Docs() {
               skill definitions, plugins, tools, rules, and configuration files.
             </p>
             <p className={styles.paragraph}>
-              Bundles are distributed as GitHub repositories following the{' '}
-              <code>opendots-{'<slug>'}</code> naming convention. Each bundle includes an{' '}
-              <code>opendots.yml</code> manifest file that describes the bundle's metadata, 
-              including its name, summary, tags, and compatibility information.
+              Bundles are distributed as GitHub repositories containing OpenCode configuration.
+              Any public GitHub repo with OpenCode artifacts can be registered as a bundle.
+              An optional <code>opendots.yml</code> manifest can provide rich metadata, but is not required —
+              metadata can also be derived from the repository itself.
             </p>
             
             <div className={styles.infoCard}>
               <strong className="text-mono">Bundle Structure</strong>
               <pre className={styles.codeBlock}>
-{`opendots-awesome-bundle/
-├── opendots.yml          # Bundle manifest
-├── opencode.json         # OpenCode configuration
-├── opencode.jsonc        # Alternative JSON with comments
-└── .opencode/            # OpenCode directory
-    ├── themes/           # Custom color themes
-    ├── skills/           # Skill definitions (SKILL.md files)
-    ├── snippets/         # Code snippets
-    ├── scripts/          # Custom scripts/tools
-    └── agents/           # Agent definitions`}
+{`my-opencode-config/
+├── opencode.json         # OpenCode configuration (JSONC)
+├── AGENTS.md             # Agent instructions/rules
+├── agent/                # Agent definitions (.md files)
+├── command/              # Slash commands (.md files)
+├── plugins/              # TypeScript plugins
+├── skills/               # Skill definitions (SKILL.md)
+├── tools/                # Custom tools
+├── prompts/              # Prompt templates
+├── themes/               # Color themes (.json)
+├── scripts/              # Utility scripts
+└── package.json          # Plugin dependencies (if needed)`}
               </pre>
             </div>
           </section>
@@ -52,8 +54,8 @@ export default function Docs() {
               <strong className="text-mono">Project Scope</strong>
               <p className={styles.infoText}>
                 Extract the <strong>Project ZIP</strong> to your project root directory. 
-                This creates an <code>opencode.json</code> file and <code>.opencode/</code> directory 
-                that only apply when OpenCode runs within that specific directory.
+                This creates the bundle's configuration files (e.g., <code>opencode.json</code>,{' '}
+                <code>agent/</code>, <code>plugins/</code>, etc.) in your project directory.
               </p>
               <pre className={styles.codeBlock}>
 {`# Install project-scoped bundle
@@ -182,16 +184,16 @@ opencode`}
                 to authenticate with your GitHub account.
               </li>
               <li>
-                <strong>Create your repository</strong> — Create a new public GitHub repository 
-                named <code>opendots-{'<your-slug>'}</code> (e.g., <code>opendots-python-dev</code>).
+                <strong>Create your repository</strong> — Create a new public GitHub repository
+                with your OpenCode configuration (any name works).
               </li>
               <li>
                 <strong>Add your configuration</strong> — Add your <code>opencode.json</code>, 
                 themes, skills, and other artifacts to the repository.
               </li>
               <li>
-                <strong>Create the manifest</strong> — Add an <code>opendots.yml</code> file 
-                at the root with your bundle's metadata:
+                <strong>Add metadata (optional)</strong> — Adding an <code>opendots.yml</code> manifest
+                at the root is recommended but not required. It provides rich metadata for your bundle page:
                 <pre className={styles.codeBlock}>
 {`name: Python Dev Bundle
 summary: Complete Python development environment for OpenCode

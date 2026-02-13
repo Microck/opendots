@@ -7,7 +7,7 @@ import styles from './CodeExplorer.module.css'
 interface FileIndexEntry {
   path: string
   size: number
-  kind: 'config' | 'theme' | 'skill' | 'snippet' | 'script' | 'other'
+  kind: 'config' | 'theme' | 'skill' | 'agent' | 'command' | 'plugin' | 'tool' | 'prompt' | 'mode' | 'rules' | 'script' | 'other'
   isBinary: boolean
   isPreviewable: boolean
 }
@@ -75,7 +75,13 @@ function getFileIcon(kind: FileIndexEntry['kind'], isBinary: boolean): string {
     case 'config': return '⚙️'
     case 'theme': return '🎨'
     case 'skill': return '📚'
-    case 'snippet': return '✂️'
+    case 'agent': return '🤖'
+    case 'command': return '⌨️'
+    case 'plugin': return '🔌'
+    case 'tool': return '🔧'
+    case 'prompt': return '💬'
+    case 'mode': return '🔀'
+    case 'rules': return '📏'
     case 'script': return '▶️'
     default: return '📄'
   }

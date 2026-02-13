@@ -59,7 +59,7 @@ interface BundleData {
   fileIndex: Array<{
     path: string
     size: number
-    kind: 'config' | 'theme' | 'skill' | 'snippet' | 'script' | 'other'
+    kind: 'config' | 'theme' | 'skill' | 'agent' | 'command' | 'plugin' | 'tool' | 'prompt' | 'mode' | 'rules' | 'script' | 'other'
     isBinary: boolean
     isPreviewable: boolean
   }>
@@ -358,8 +358,8 @@ export default function Detail() {
                 Download Project ZIP
               </a>
               <div className={styles.downloadInstructions}>
-                <strong>Install:</strong> Extract to your project root. The <code>opencode.json</code> and{' '}
-                <code>.opencode/</code> directory will be created.
+                <strong>Install:</strong> Extract to your project root.
+                Bundle files (config, agents, plugins, etc.) will be created in your project.
               </div>
             </div>
             

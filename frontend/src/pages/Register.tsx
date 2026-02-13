@@ -80,13 +80,13 @@ export default function Register() {
               <input
                 type="text"
                 className={styles.inputText}
-                placeholder="e.g. user/opendots-my-bundle"
+                placeholder="e.g. user/my-opencode-config"
                 value={repo}
                 onChange={(e) => setRepo(e.target.value)}
                 disabled={isLoading}
               />
               <p className={styles.hint}>
-                Must be owned by you. Must adhere to naming convention <code>opendots-*</code>.
+                Must be a public GitHub repository owned by you.
               </p>
             </div>
 
@@ -102,7 +102,7 @@ export default function Register() {
               </span>
               <ul className={styles.requirementList}>
                 <li>Repo public access</li>
-                <li><code>opendots.yml</code> manifest at root</li>
+                <li><code>opencode.json</code> or <code>opendots.yml</code> at root (recommended)</li>
                 <li>Valid JSON/YAML syntax in config files</li>
               </ul>
             </div>

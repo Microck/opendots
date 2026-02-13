@@ -21,6 +21,7 @@ export const snapshot = sqliteTable('snapshot', {
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => sql`(strftime('%s', 'now'))`),
   storagePath: text('storagePath').notNull(),
   byteSize: integer('byteSize').notNull(),
+  fileIndex: text('fileIndex'),
 }, (table) => ({
   uniqueIdx: uniqueIndex('snapshot_bundle_commit_idx').on(table.bundleId, table.commitSha),
 }));

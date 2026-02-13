@@ -3,6 +3,7 @@ import { fastifyAuthRoute } from './auth/fastifyAuthRoute';
 import { healthRoute } from './routes/health';
 import { sessionRoute } from './routes/session';
 import { publisherBundlesRoute } from './routes/publisherBundles';
+import { publicBundlesRoute } from './routes/publicBundles';
 
 const PORT = Number(process.env.PORT) || 8787;
 
@@ -15,6 +16,7 @@ async function buildServer() {
   await server.register(healthRoute);
   await server.register(sessionRoute);
   await server.register(publisherBundlesRoute);
+  await server.register(publicBundlesRoute);
 
   server.addHook('onRequest', async (request, reply) => {
     reply.header('Access-Control-Allow-Origin', request.headers.origin || '*');

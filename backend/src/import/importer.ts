@@ -5,6 +5,7 @@ import { publisherBundle } from '../db/schema/publisher';
 import { eq, desc, and } from 'drizzle-orm';
 import { createGitHubClient } from '../github/githubClient';
 import { saveSnapshot, snapshotExists } from '../storage/snapshots';
+import { buildFileIndex } from './fileIndex';
 
 const MAX_ZIP_SIZE_BYTES = 25 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 60000;
@@ -87,12 +88,16 @@ export async function importBundle(
       }
 
       const snapshotInfo = await saveSnapshot(bundleId, commitSha, zipBuffer);
+      
+      // Build file index from the saved snapshot
+      const fileIndex = buildFileIndex(snapshotInfo.path);
 
       await db.insert(snapshot).values({
         bundleId,
         commitSha,
         storagePath: snapshotInfo.path,
         byteSize: snapshotInfo.byteSize,
+        fileIndex: JSON.stringify(fileIndex),
       });
 
       await db.update(importRun)

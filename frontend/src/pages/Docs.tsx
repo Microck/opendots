@@ -184,27 +184,22 @@ opencode`}
                 to authenticate with your GitHub account.
               </li>
               <li>
-                <strong>Create your repository</strong> — Create a new public GitHub repository
-                with your OpenCode configuration (any name works).
+                <strong>Create your repository</strong> — Create a new public GitHub repository 
+                named <code>opendots-&lt;your-bundle-name&gt;</code>. The <code>opendots-</code> prefix is required.
+              </li>
+              <li>
+                <strong>Add required manifest</strong> — Add an <code>opendots.yml</code> manifest 
+                at the repository root. This file is required and must include:
+                <pre className={styles.codeBlock}>
+{`id: my-bundle
+name: My Bundle Name
+summary: Brief description of your bundle
+license: MIT`}
+                </pre>
               </li>
               <li>
                 <strong>Add your configuration</strong> — Add your <code>opencode.json</code>, 
                 themes, skills, and other artifacts to the repository.
-              </li>
-              <li>
-                <strong>Add metadata (optional)</strong> — Adding an <code>opendots.yml</code> manifest
-                at the root is recommended but not required. It provides rich metadata for your bundle page:
-                <pre className={styles.codeBlock}>
-{`name: Python Dev Bundle
-summary: Complete Python development environment for OpenCode
-description: |
-  Includes linting configs, Python-specific agents, 
-  and handy snippets for Django and Flask.
-tags: [python, django, flask, linting]
-license: MIT
-compatibility:
-  opencode: ">=1.0.0"`}
-                </pre>
               </li>
               <li>
                 <strong>Register on Opendots</strong> — Visit your Dashboard, click "Register Bundle", 
@@ -212,7 +207,7 @@ compatibility:
               </li>
               <li>
                 <strong>System validates and imports</strong> — Opendots will clone your repo, 
-                validate the structure, scan for safety issues, and create your bundle page.
+                validate the naming convention and manifest, scan for safety issues, and create your bundle page.
               </li>
             </ol>
 

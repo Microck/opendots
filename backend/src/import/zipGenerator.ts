@@ -35,10 +35,13 @@ function getOutputPath(entryPath: string, variant: ZipVariant): string | null {
   const normalized = normalizePath(entryPath);
   if (normalized === null) return null;
   
-  // Both variants preserve the layout as-is
-  // Project: user extracts to project root
-  // Global: user extracts to ~/.config/opencode/
-  // The actual repo structure IS the config structure
+  if (variant === 'global') {
+    // Prefix paths for global install: ~/.config/opencode/
+    // e.g., "opendots.yml" -> ".config/opencode/opendots.yml"
+    return `.config/opencode/${normalized}`;
+  }
+  
+  // Project variant: files at root
   return normalized;
 }
 

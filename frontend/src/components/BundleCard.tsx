@@ -1,6 +1,9 @@
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { getDeterministicAccent, hexToRgbString } from '../lib/colors'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import { hoverLift } from '../styles/animations'
 import styles from './BundleCard.module.css'
 
 export interface BundleCardData {
@@ -53,6 +56,7 @@ function formatCount(value: number): string {
 
 export default function BundleCard({ bundle }: BundleCardProps) {
   const navigate = useNavigate()
+  const prefersReducedMotion = useReducedMotion()
 
   const handleOpenDetail = () => {
     navigate(`/bundle/${bundle.id}`)
@@ -75,13 +79,18 @@ export default function BundleCard({ bundle }: BundleCardProps) {
   } as CSSProperties
 
   return (
-    <div
+    <motion.div
       className={styles.card}
       style={cardStyle}
       onClick={handleOpenDetail}
       role="link"
       tabIndex={0}
       onKeyDown={handleKeyDown}
+      whileHover={prefersReducedMotion ? undefined : "hover"}
+      whileTap={prefersReducedMotion ? undefined : "tap"}
+      variants={prefersReducedMotion ? undefined : hoverLift}
+      initial="rest"
+      animate="rest"
     >
       <div className={styles.cardAccent} />
       <div className={styles.header}>
@@ -103,6 +112,6 @@ export default function BundleCard({ bundle }: BundleCardProps) {
         </div>
         <span className={styles.metaItem}>Upd: {formatRelativeTime(bundle.updatedAt)}</span>
       </div>
-    </div>
+    </motion.div>
   )
 }

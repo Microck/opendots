@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { motion } from 'motion/react'
 import { fetchBundles, type BrowseSort } from '../api/bundles'
 import BundleCard, { type BundleCardData } from '../components/BundleCard'
 import useDebouncedValue from '../hooks/useDebouncedValue'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import { staggerGrid, staggerItem, scrollViewports } from '../styles/animations'
 import styles from './Browse.module.css'
 
 const DEFAULT_TAG_OPTIONS = ['minimal', 'theme', 'productivity', 'terminal', 'workflow', 'ai']
@@ -49,6 +52,7 @@ export default function Browse() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '')
+  const prefersReducedMotion = useReducedMotion()
 
   const qFromUrl = searchParams.get('q') ?? ''
   const selectedTags = normalizeValues(searchParams.getAll('tag'))
@@ -311,11 +315,22 @@ export default function Browse() {
         )}
 
         {!loading && !error && bundles.length > 0 && (
-          <div className={styles.bundleGrid}>
+          <motion.div
+            className={styles.bundleGrid}
+            variants={prefersReducedMotion ? undefined : staggerGrid}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
             {bundles.map((bundle) => (
-              <BundleCard key={bundle.id} bundle={bundle} />
+              <motion.div
+                key={bundle.id}
+                variants={prefersReducedMotion ? undefined : staggerItem}
+              >
+                <BundleCard bundle={bundle} />
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
       </div>
     </div>

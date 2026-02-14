@@ -4,11 +4,6 @@
   animation: fadeIn 0.3s ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .authContainer {
   max-width: 400px;
   margin: 0 auto;
@@ -32,7 +27,7 @@
   font-weight: 700;
   font-size: 0.8rem;
   text-transform: uppercase;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s, border-color 0.2s;
   border: 1px solid #FFFFFF;
   width: 100%;
   display: flex;

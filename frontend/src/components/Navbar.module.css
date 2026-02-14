@@ -53,7 +53,7 @@
   text-transform: uppercase;
   font-weight: 600;
   letter-spacing: 0.05em;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s;
   background: transparent;
   color: #fff;
   cursor: pointer;
@@ -73,7 +73,7 @@
   font-weight: 600;
   letter-spacing: 0.05em;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s, color 0.2s;
 }
 .authBtn:hover {
   background: rgba(255,255,255,0.9);

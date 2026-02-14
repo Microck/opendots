@@ -4,11 +4,6 @@
   animation: fadeIn 0.3s ease;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
 .headerRow {
   display: flex;
   justify-content: space-between;

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, useNavigate } from 'react-router-dom'
+import { Routes, Route, useNavigate, useLocation } from 'react-router-dom'
+import { AnimatePresence } from 'motion/react'
 import { IconContext } from '@phosphor-icons/react'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import PageTransition from './components/PageTransition'
 import Home from './pages/Home'
 import Browse from './pages/Browse'
 import Detail from './pages/Detail'
@@ -28,6 +30,12 @@ export default function App() {
   const [user, setUser] = useState<SessionUser | null>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Scroll to top on route change
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [location.pathname])
 
   useEffect(() => {
     const checkSession = async () => {
@@ -59,15 +67,17 @@ export default function App() {
   return (
     <IconContext.Provider value={{ weight: 'bold', size: 20 }}>
       <Navbar isLoggedIn={isLoggedIn} user={user} />
-      <Routes>
-        <Route path="/" element={<Home isLoggedIn={isLoggedIn} />} />
-        <Route path="/browse" element={<Browse />} />
-        <Route path="/bundle/:id" element={<Detail />} />
-        <Route path="/signin" element={<SignIn />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/docs" element={<Docs />} />
-      </Routes>
+      <AnimatePresence mode="wait" initial={false}>
+        <Routes location={location}>
+          <Route path="/" element={<PageTransition><Home isLoggedIn={isLoggedIn} /></PageTransition>} />
+          <Route path="/browse" element={<PageTransition><Browse /></PageTransition>} />
+          <Route path="/bundle/:id" element={<PageTransition><Detail /></PageTransition>} />
+          <Route path="/signin" element={<PageTransition><SignIn /></PageTransition>} />
+          <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
+          <Route path="/register" element={<PageTransition><Register /></PageTransition>} />
+          <Route path="/docs" element={<PageTransition><Docs /></PageTransition>} />
+        </Routes>
+      </AnimatePresence>
       <Footer />
     </IconContext.Provider>
   )

@@ -231,3 +231,55 @@ export const defaultTransition: Transition = {
   duration: 0.4,
   ease: [0.25, 0.46, 0.45, 0.94],
 }
+
+/**
+ * Page enter animation - fade in with slight upward slide
+ */
+export const pageEnter: Variants = {
+  hidden: {
+    opacity: 0,
+    y: 8,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.35,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  },
+  exit: {
+    opacity: 0,
+    y: -8,
+    transition: {
+      duration: 0.25,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  },
+}
+
+/**
+ * Page exit animation - fade out with slight downward slide
+ */
+export const pageExit: Variants = {
+  hidden: {
+    opacity: 0,
+    y: -8,
+  },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      duration: 0.35,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  },
+  exit: {
+    opacity: 0,
+    y: 8,
+    transition: {
+      duration: 0.25,
+      ease: [0.25, 0.46, 0.45, 0.94],
+    },
+  },
+}

@@ -1,5 +1,6 @@
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { getDeterministicAccent, hexToRgbString } from '../lib/colors'
 import styles from './BundleCard.module.css'
 
 export interface BundleCardData {
@@ -64,8 +65,13 @@ export default function BundleCard({ bundle }: BundleCardProps) {
     }
   }
 
+  // Use theme accent or deterministic fallback
+  const accentColor = bundle.accentColor ?? getDeterministicAccent(bundle.id)
+  const rgbAccent = hexToRgbString(accentColor)
+
   const cardStyle = {
-    '--card-accent': bundle.accentColor ?? 'var(--border-active)',
+    '--card-accent': accentColor,
+    '--card-accent-rgb': rgbAccent,
   } as CSSProperties
 
   return (

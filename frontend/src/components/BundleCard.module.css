@@ -1,9 +1,14 @@
 .card {
   background: var(--bg-card);
+  background-image: linear-gradient(
+    135deg,
+    rgba(var(--card-accent-rgb, 128 220 255), 0.08) 0%,
+    transparent 50%
+  );
   border: 1px solid var(--border-light);
   padding: var(--space-lg);
   padding-left: calc(var(--space-lg) + 4px);
-  transition: background-color 0.2s, border-color 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -14,17 +19,28 @@
 }
 .card:hover {
   border-color: var(--border-hover);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(10, 37, 144, 0.5);
+  box-shadow: 0 0 20px rgba(var(--card-accent-rgb, 128 220 255), 0.15);
 }
 
 .cardAccent {
   position: absolute;
   top: 0; left: 0; bottom: 0;
   width: 4px;
-  background: var(--card-accent, var(--border-active));
+  background: linear-gradient(
+    180deg,
+    var(--card-accent, var(--border-active)) 0%,
+    color-mix(in srgb, var(--card-accent, var(--border-active)) 60%, #000) 100%
+  );
+  opacity: 0.9;
 }
 .card:hover .cardAccent {
-  box-shadow: 0 0 8px rgba(128, 220, 255, 0.4);
+  background: linear-gradient(
+    180deg,
+    var(--card-accent, var(--border-active)) 0%,
+    color-mix(in srgb, var(--card-accent, var(--border-active)) 60%, #000) 100%
+  );
+  box-shadow: 0 0 12px rgba(var(--card-accent-rgb, 128 220 255), 0.5);
 }
 
 .header {

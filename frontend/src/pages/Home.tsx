@@ -1,7 +1,6 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, lazy, Suspense } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { Star } from '@phosphor-icons/react'
 import BundleCard, { type BundleCardData } from '../components/BundleCard'
 import { useReducedMotion } from '../hooks/useReducedMotion'
 import {
@@ -12,6 +11,9 @@ import {
   hoverScale,
 } from '../styles/animations'
 import styles from './Home.module.css'
+
+// Lazy-load AsciiHero for code splitting (Three.js bundle isolation)
+const AsciiHero = lazy(() => import('../components/AsciiHero'))
 
 interface HomeProps {
   isLoggedIn: boolean
@@ -78,9 +80,22 @@ export default function Home({ isLoggedIn }: HomeProps) {
               visible: { opacity: 1, scale: 1, transition: { delay: 0.1, duration: 0.5 } },
             }}
           >
-            <div className={styles.archStar}>
-              <Star size={48} weight="fill" aria-label="Featured" />
-            </div>
+            <Suspense fallback={
+              <div style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--text-dim)',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '12px',
+              }}>
+                LOADING_3D...
+              </div>
+            }>
+              <AsciiHero />
+            </Suspense>
           </motion.div>
 
           <h1 className={styles.heroTitle}>

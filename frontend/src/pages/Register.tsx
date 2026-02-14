@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check, ArrowLeft } from '@phosphor-icons/react'
 import styles from './Register.module.css'
 
 export default function Register() {
@@ -48,13 +49,13 @@ export default function Register() {
     }
   }
 
-  if (success) {
+    if (success) {
     return (
       <div className={styles.page}>
         <div className="container">
           <div className={styles.formContainer}>
             <div className={styles.successMessage}>
-              ✓ Repository registered successfully!
+              <Check size={24} weight="bold" aria-label="Success" /> Repository registered successfully!
             </div>
             <p style={{ textAlign: 'center', marginTop: '16px' }}>
               Redirecting to dashboard...
@@ -69,7 +70,7 @@ export default function Register() {
     <div className={styles.page}>
       <div className="container">
         <a onClick={() => navigate('/dashboard')} className={styles.backLink}>
-          &larr; BACK TO DASHBOARD
+          <ArrowLeft size={16} weight="bold" aria-label="Back" /> BACK TO DASHBOARD
         </a>
         <div className={styles.formContainer}>
           <h2 style={{ marginBottom: 'var(--space-lg)' }}>REGISTER REPOSITORY</h2>

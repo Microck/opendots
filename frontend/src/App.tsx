@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Routes, Route, useNavigate } from 'react-router-dom'
+import { IconContext } from '@phosphor-icons/react'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
 import Home from './pages/Home'
@@ -56,7 +57,7 @@ export default function App() {
   }
 
   return (
-    <>
+    <IconContext.Provider value={{ weight: 'bold', size: 20 }}>
       <Navbar isLoggedIn={isLoggedIn} user={user} />
       <Routes>
         <Route path="/" element={<Home isLoggedIn={isLoggedIn} />} />
@@ -68,7 +69,7 @@ export default function App() {
         <Route path="/docs" element={<Docs />} />
       </Routes>
       <Footer />
-    </>
+    </IconContext.Provider>
   )
 }
 

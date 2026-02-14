@@ -2,6 +2,21 @@ import { useState, useEffect, useCallback } from 'react'
 import { Highlight, themes } from 'prism-react-renderer'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import {
+  Gear,
+  Palette,
+  BookOpen,
+  Robot,
+  Keyboard,
+  Plug,
+  Wrench,
+  ChatCircle,
+  GitBranch,
+  Ruler,
+  Play,
+  File,
+  FileArchive,
+} from '@phosphor-icons/react'
 import styles from './CodeExplorer.module.css'
 
 interface FileIndexEntry {
@@ -69,21 +84,36 @@ function getIndentLevel(path: string): number {
 }
 
 // Get icon based on file kind
-function getFileIcon(kind: FileIndexEntry['kind'], isBinary: boolean): string {
-  if (isBinary) return '📎'
+function getFileIcon(kind: FileIndexEntry['kind'], isBinary: boolean): React.ReactNode {
+  const iconProps = { size: 16, 'aria-hidden': true }
+  
+  if (isBinary) return <FileArchive {...iconProps} aria-label="Binary file" />
+  
   switch (kind) {
-    case 'config': return '⚙️'
-    case 'theme': return '🎨'
-    case 'skill': return '📚'
-    case 'agent': return '🤖'
-    case 'command': return '⌨️'
-    case 'plugin': return '🔌'
-    case 'tool': return '🔧'
-    case 'prompt': return '💬'
-    case 'mode': return '🔀'
-    case 'rules': return '📏'
-    case 'script': return '▶️'
-    default: return '📄'
+    case 'config': 
+      return <Gear {...iconProps} aria-label="Config file" />
+    case 'theme': 
+      return <Palette {...iconProps} aria-label="Theme file" />
+    case 'skill': 
+      return <BookOpen {...iconProps} aria-label="Skill file" />
+    case 'agent': 
+      return <Robot {...iconProps} aria-label="Agent file" />
+    case 'command': 
+      return <Keyboard {...iconProps} aria-label="Command file" />
+    case 'plugin': 
+      return <Plug {...iconProps} aria-label="Plugin file" />
+    case 'tool': 
+      return <Wrench {...iconProps} aria-label="Tool file" />
+    case 'prompt': 
+      return <ChatCircle {...iconProps} aria-label="Prompt file" />
+    case 'mode': 
+      return <GitBranch {...iconProps} aria-label="Mode file" />
+    case 'rules': 
+      return <Ruler {...iconProps} aria-label="Rules file" />
+    case 'script': 
+      return <Play {...iconProps} aria-label="Script file" />
+    default: 
+      return <File {...iconProps} aria-label="File" />
   }
 }
 

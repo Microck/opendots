@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router'
+import { FolderSimple, Globe, ArrowSquareOut } from '@phosphor-icons/react'
 import CodeExplorer from '../components/CodeExplorer'
 import styles from './Detail.module.css'
 
@@ -185,7 +186,7 @@ export default function Detail() {
                 rel="noopener noreferrer"
                 className={styles.btnOutline}
               >
-                View on GitHub &#8599;
+                View on GitHub <ArrowSquareOut size={16} weight="bold" aria-label="External link" />
               </a>
             </div>
           </div>
@@ -345,7 +346,9 @@ export default function Detail() {
           <h2 className={styles.sectionHeading}>Download</h2>
           <div className={styles.downloadGrid}>
             <div className={styles.downloadCard}>
-              <div className={styles.downloadIcon}>📁</div>
+              <div className={styles.downloadIcon}>
+                <FolderSimple size={32} weight="bold" aria-label="Project ZIP" />
+              </div>
               <h3 className={styles.downloadTitle}>Project ZIP</h3>
               <p className={styles.downloadDesc}>
                 Install into current project. Config lives alongside code and applies only to this directory.
@@ -364,7 +367,9 @@ export default function Detail() {
             </div>
             
             <div className={styles.downloadCard}>
-              <div className={styles.downloadIcon}>🌐</div>
+              <div className={styles.downloadIcon}>
+                <Globe size={32} weight="bold" aria-label="Global ZIP" />
+              </div>
               <h3 className={styles.downloadTitle}>Global ZIP</h3>
               <p className={styles.downloadDesc}>
                 Install to user home. Config applies to all OpenCode projects on your machine.

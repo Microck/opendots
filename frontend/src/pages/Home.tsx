@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Star } from '@phosphor-icons/react'
 import BundleCard, { type BundleCardData } from '../components/BundleCard'
 import styles from './Home.module.css'
 
@@ -52,7 +53,9 @@ export default function Home({ isLoggedIn }: HomeProps) {
           <div className={`${styles.verticalDeco} ${styles.rightDeco}`}>SYSTEM_CFG</div>
 
           <div className={styles.archWindow}>
-            <div className={styles.archStar}>&#10022;</div>
+            <div className={styles.archStar}>
+              <Star size={48} weight="fill" aria-label="Featured" />
+            </div>
           </div>
 
           <h1 className={styles.heroTitle}>

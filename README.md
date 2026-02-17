@@ -1,41 +1,65 @@
 <p align="center">
-  <img src="frontend/public/brand/opendots-logo.svg" width="100" alt="opendots logo" />
+  <a href="https://opendots.me">
+    <img src="frontend/public/brand/opendots-logo-isometric.svg" width="100" alt="opendots logo" />
+  </a>
 </p>
 
-<p align="center">opendots is a registry for opencode configuration bundles: browse, publish, download, and verify.</p>
+<p align="center">opendots is a public directory for opencode configuration bundles.</p>
 
 <p align="center">
   <a href="https://opendots.me"><img alt="website" src="https://img.shields.io/badge/website-opendots.me-111111" /></a>
   <a href="https://github.com/microck/opendots/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/microck/opendots/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://opendots.me/docs"><img alt="docs" src="https://img.shields.io/badge/docs-opendots.me%2Fdocs-111111" /></a>
 </p>
 
 <p align="center">
   <img src="frontend/public/brand/opendots-banner.jpg" width="800" alt="opendots screenshot" />
 </p>
 
-## what is this
+---
 
-opendots is a public directory for opencode configuration bundles.
+## overview
 
-publishers connect github, register a repo, and opendots imports a snapshot of the config so it can be previewed, scanned, and downloaded.
+opendots is a place to find and share opencode configs without copy-pasting random dotfiles.
 
-## how it works
+it focuses on two things:
 
-- browse bundles with safety signals and file previews
-- publish by linking a github repo and claiming ownership
-- download a zip you can install into a project or your global opencode config
+- discovery: browse bundles and quickly see what they contain
+- trust: preview files before you download, with basic safety signals
+
+## quick links
+
+- website: https://opendots.me
+- browse: https://opendots.me/browse
+- docs: https://opendots.me/docs
+- publish: https://opendots.me/publish.md
+- install: https://opendots.me/install.md
+- terms: `frontend/public/TERMS.md`
+- privacy: `frontend/public/PRIVACY.md`
 
 ## architecture
 
 ```mermaid
 flowchart lr
   u[browser] --> site[opendots ui]
-  site -->|/api/*| fn[vercel function]
-  fn --> api[api router]
-  api --> db[(database)]
-  api --> gh[github oauth]
-  api --> snap[snapshots (optional blob)]
+  u -->|/api/*| fn[vercel function]
+  fn --> app[fastify app]
+  app --> db[(database)]
+  app --> gh[github api + oauth]
+  app --> snap[snapshot storage]
 ```
+
+publish flow:
+
+- connect github
+- register a repo
+- opendots imports a snapshot and runs lightweight validation/scans
+
+browse flow:
+
+- list bundles
+- open a bundle page
+- preview files and download a zip
 
 ## repo layout
 
@@ -63,6 +87,14 @@ npm --prefix backend run dev   # http://localhost:8788
 - copy `backend/.env.example` to `backend/.env`
 
 for prod env vars (github oauth, turso, optional upstash/turnstile/blob), see `DEPLOY.md`.
+
+## features
+
+- bundle pages with file tree + readable previews
+- downloads for project or global install layouts
+- github oauth for publishers
+- repo import with snapshots (stable browsing without live github fetches)
+- basic safety signals (best-effort scanning, not a guarantee)
 
 ## api (selected)
 

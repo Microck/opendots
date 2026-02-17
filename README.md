@@ -44,11 +44,11 @@ api/       vercel serverless function (mounts backend at /api/*)
 requirements: node 20+
 
 ```bash
-npm install -C frontend
-npm install -C backend
+npm --prefix frontend install
+npm --prefix backend install
 
-npm run dev -C frontend  # http://localhost:5173
-npm run dev -C backend   # http://localhost:8788
+npm --prefix frontend run dev  # http://localhost:5173
+npm --prefix backend run dev   # http://localhost:8788
 ```
 
 ## env

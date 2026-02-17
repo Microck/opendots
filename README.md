@@ -1,42 +1,75 @@
 <p align="center">
-  <a href="https://opendots.me">
-    <img src="https://raw.githubusercontent.com/Microck/opendots-microck/main/opendots-banner.jpg" alt="OpenDots" style="max-width: 100%; border-radius: 8px;" />
-  </a>
+  <img src="frontend/public/brand/opendots-logo.svg" width="100" alt="opendots logo" />
 </p>
 
-<h1 align="center">Microck OpenDots Bundle</h1>
+<p align="center">opendots is a registry for opencode configuration bundles: browse, publish, download, and verify.</p>
 
 <p align="center">
-  <a href="https://opendots.me/bundle/d0722070-5fc6-4c27-bffa-97bf44c17da9">View on OpenDots</a> •
-  <a href="#install">Install</a> •
-  <a href="#contents">Contents</a>
+  <a href="https://opendots.me"><img alt="website" src="https://img.shields.io/badge/website-opendots.me-111111" /></a>
+  <a href="https://github.com/microck/opendots/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/microck/opendots/actions/workflows/ci.yml/badge.svg" /></a>
 </p>
 
----
+<p align="center">
+  <img src="frontend/public/brand/opendots-banner.jpg" width="800" alt="opendots screenshot" />
+</p>
 
-## Install
+## what is this
+
+opendots is a small full-stack app:
+
+- frontend: public website and ui for browsing bundles
+- backend: api for auth, publishing, downloads, and previews
+
+## architecture
+
+```mermaid
+flowchart lr
+  user[browser] --> fe[frontend (vite + react)]
+  fe -->|http| be[backend (fastify)]
+  be --> db[(sqlite / turso)]
+  be --> gh[github oauth]
+  be --> blob[vercel blob (optional)]
+```
+
+## repo layout
 
 ```
-Fetch and follow https://opendots.me/INSTALL.md for bundle URL: https://opendots.me/bundle/d0722070-5fc6-4c27-bffa-97bf44c17da9
+frontend/  react + vite + typescript
+backend/   fastify + typescript + drizzle
+api/       vercel serverless function (mounts backend at /api/*)
 ```
 
-## Contents
+## local dev
 
-- **agents/** — Agent definitions for OpenCode
-- **commands/** — Custom slash commands
-- **plugins/** — Plugin configurations
-- **rules/** — Rules files (AGENTS.md)
-- **skills/** — Skill definitions
-- **themes/** — Color themes
-- **opencode.json** — OpenCode configuration
-- **opendots.yml** — Bundle manifest
+requirements: node 20+
 
-## Safety
+```bash
+npm install -C frontend
+npm install -C backend
 
-This bundle is scanned by OpenDots. Review the safety badges and file previews before installing.
+npm run dev -C frontend  # http://localhost:5173
+npm run dev -C backend   # http://localhost:8788
+```
 
-## Discover More
+## env
 
-- **[Browse bundles](https://opendots.me/browse)** — Explore configs from the community
-- **[Publish your own](https://opendots.me)** — Share your OpenCode setup
-- **[OpenDots](https://opendots.me)** — The registry for OpenCode configurations
+- copy `frontend/.env.example` to `frontend/.env`
+- copy `backend/.env.example` to `backend/.env`
+
+for prod env vars (github oauth, turso, optional upstash/turnstile/blob), see `DEPLOY.md`.
+
+## api (selected)
+
+- get `/api/health`
+- get `/api/bundles`
+- get `/api/bundles/:id`
+- get `/api/bundles/:id/file`
+- get `/api/bundles/:id/download`
+- post `/api/publish/claim/start`
+- post `/api/publish/claim/complete`
+- get `/api/auth/session`
+- all auth routes: `/api/auth/*`
+
+## contact
+
+contact@micr.dev

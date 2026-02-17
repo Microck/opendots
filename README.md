@@ -34,8 +34,9 @@ it focuses on two things:
 - docs: https://opendots.me/docs
 - publish: https://opendots.me/publish.md
 - install: https://opendots.me/install.md
-- terms: `frontend/public/TERMS.md`
-- privacy: `frontend/public/PRIVACY.md`
+- terms: https://opendots.me/terms.md
+- privacy: https://opendots.me/privacy.md
+- github: https://github.com/microck/opendots
 
 ## architecture
 

@@ -40,13 +40,13 @@ it focuses on two things:
 ## architecture
 
 ```mermaid
-flowchart lr
+flowchart LR
   u[browser] --> site[opendots ui]
-  u -->|/api/*| fn[vercel function]
-  fn --> app[fastify app]
+  u -->|api requests| fn[vercel function]
+  fn --> app[backend]
   app --> db[(database)]
-  app --> gh[github api + oauth]
-  app --> snap[snapshot storage]
+  app --> gh[github]
+  app --> snap[snapshots]
 ```
 
 publish flow:

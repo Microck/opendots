@@ -1,4 +1,5 @@
 import type { BundleCardData } from '../components/BundleCard'
+import { apiUrl } from '../lib/apiBase'
 
 export type BrowseSort = 'newest'
 
@@ -49,7 +50,7 @@ export function buildBundlesQueryString(params: BrowseQuery): string {
 export async function fetchBundles(params: BrowseQuery, signal: AbortSignal): Promise<BundleCardData[]> {
   const queryString = buildBundlesQueryString(params)
   const endpoint = queryString.length > 0 ? `/api/bundles?${queryString}` : '/api/bundles'
-  const response = await fetch(endpoint, { signal })
+  const response = await fetch(apiUrl(endpoint), { signal })
 
   if (!response.ok) {
     throw new Error(`Failed to load bundles (${response.status})`)

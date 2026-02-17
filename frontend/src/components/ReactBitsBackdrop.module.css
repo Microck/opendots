@@ -1,0 +1,15 @@
+.backdrop {
+  position: fixed;
+  inset: -1px;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.layers {
+  position: absolute;
+  inset: 0;
+}
+
+.squares {
+  opacity: 0.55;
+}

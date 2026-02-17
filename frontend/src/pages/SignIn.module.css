@@ -1,7 +1,6 @@
 .page {
   padding-top: var(--space-2xl);
   padding-bottom: var(--space-2xl);
-  animation: fadeIn 0.3s ease;
 }
 
 .authContainer {
@@ -18,13 +17,23 @@
   margin-bottom: var(--space-lg);
 }
 
+.errorCard {
+  border: 1px solid #ff6b6b;
+  color: #ffb4b4;
+  background: rgba(255, 107, 107, 0.12);
+  padding: var(--space-sm);
+  margin-bottom: var(--space-md);
+  font-size: 0.82rem;
+  text-align: left;
+}
+
 .btnPrimary {
   background: #FFFFFF;
   color: var(--bg-body);
   padding: 8px 24px;
   border-radius: 0;
-  font-family: var(--font-body);
-  font-weight: 700;
+  font-family: var(--font-accent);
+  font-weight: 400;
   font-size: 0.8rem;
   text-transform: uppercase;
   transition: background-color 0.2s, color 0.2s, border-color 0.2s;
@@ -39,4 +48,9 @@
 .btnPrimary:hover {
   background: transparent;
   color: #FFFFFF;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }

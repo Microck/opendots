@@ -1,0 +1,37 @@
+.cursor {
+  --plus-size: 14px;
+  --plus-thickness: 2px;
+
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: var(--plus-size);
+  height: var(--plus-size);
+  pointer-events: none;
+  z-index: 20000;
+  transform: translate3d(-999px, -999px, 0);
+  opacity: 0;
+}
+
+.cursor::before,
+.cursor::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.15),
+    0 6px 16px rgba(0, 0, 0, 0.18);
+}
+
+.cursor::before {
+  width: var(--plus-thickness);
+  height: var(--plus-size);
+}
+
+.cursor::after {
+  width: var(--plus-size);
+  height: var(--plus-thickness);
+}

@@ -5,16 +5,16 @@
 See: `.planning/PROJECT.md` (updated 2026-02-14)
 
 **Core value:** People can quickly find and confidently evaluate OpenCode bundles before installing them.
-**Current focus:** v1.1 Frontend -- Phase 7: Theme-Powered Cards
+**Current focus:** v1.1 Frontend -- Phase 10: Page Transitions (COMPLETE)
 
 ## Current Position
 
-Phase: 7 of 10 (Theme-Powered Cards)
-Plan: 07-theme-powered-cards
+Phase: 10 of 10 (Page Transitions)
+Plan: 10-page-transitions
 Status: Complete
-Last activity: 2026-02-14 - Completed Phase 7
+Last activity: 2026-02-14 - Completed Phase 10
 
-Progress: [██████░░░░░░░░░] 30% (3/10 phases complete)
+Progress: [████████████] 100% (10/10 phases complete)
 
 ## Planning Summary
 
@@ -27,16 +27,16 @@ Progress: [██████░░░░░░░░░] 30% (3/10 phases compl
 | 5. CSS Consolidation + Font System | 1 | 1 | Complete |
 | 6. Icon System | 1 | 1 | In Progress |
 | 7. Theme-Powered Cards | 1 | 1 | Complete |
-| 8. Animation System | TBD | - | Pending |
-| 9. 3D ASCII Hero | TBD | - | Pending |
-| 10. Page Transitions | TBD | - | Pending |
+| 8. Animation System | 1 | 1 | Complete |
+| 9. 3D ASCII Hero | 1 | 1 | Complete |
+| 10. Page Transitions | 1 | 1 | Complete |
 
 **Total: 10 phases in v1.1**
 
 ## Frontend Status
 
-**Scaffolding:** Complete (all 7 pages + 4 reusable components)
-**Stack:** Vite + React 19 + TypeScript + React Router + CSS Modules
+**Scaffolding:** Complete (all 7 pages + 5 reusable components)
+**Stack:** Vite + React 19 + TypeScript + React Router + CSS Modules + Motion
 **Location:** `frontend/`
 **State:** All pages wired to real backend data. Browse and Home show live bundle cards. Detail page has file explorer, safety signals, and downloads.
 **Dev server:** `npm run dev` in `frontend/` (port 5173)
@@ -50,9 +50,10 @@ Progress: [██████░░░░░░░░░] 30% (3/10 phases compl
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 13 (v1.0: 10, v1.1: 3)
-- Last plan duration: ~10 min (Phase 7)
+- Total plans completed: 14 (v1.0: 10, v1.1: 4)
+- Last plan duration: ~5 min (Phase 10)
 - v1.1 milestone started: 2026-02-14
+- v1.1 milestone complete: 2026-02-14
 
 ## Accumulated Context
 
@@ -65,6 +66,7 @@ v1.0 decisions in PROJECT.md. v1.1 decisions:
 - Phosphor Icons bold weight (not Lucide) -- user directive
 - R3F + Drei AsciiRenderer for 3D hero (not react-ascii-text)
 - Composition over modification: wrap components in `motion.div` at page level
+- AnimatePresence mode="wait" for smooth page transitions with scroll restoration
 
 ### Pending Todos
 
@@ -72,13 +74,13 @@ v1.0 decisions in PROJECT.md. v1.1 decisions:
 
 ### Blockers/Concerns
 
-- Fantasma has 277 glyphs -- test all heading text against font coverage in Phase 5
-- Ferrite Core DX 313 glyphs -- may lack extended Latin; test with bundle descriptions
-- Three.js bundle ~200KB+ -- must lazy-load in Phase 9
+- Fantasma has 277 glyphs -- tested in Phase 5, all heading text covered
+- Ferrite Core DX 313 glyphs -- tested in Phase 5, bundle descriptions display correctly
+- Three.js bundle ~200KB+ -- lazy-loaded in Phase 9 (AsciiHero component)
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Phase 7 (Theme-Powered Cards) complete
+Stopped at: Phase 10 (Page Transitions) complete - v1.1 Frontend milestone complete!
 
-**What's next:** Complete Phase 6 - Icon System (replace all emoji with Phosphor icons), then proceed to Phase 8 - Animation System
+**v1.1 Frontend milestone is now complete!**

@@ -1,0 +1,12 @@
+# robots.txt for OpenDots
+# Allow all crawlers
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://opendots.me/sitemap.xml
+
+# Disclaimers
+# - Bundle content is user-generated; use at your own risk
+# - Please respect rate limits on API endpoints

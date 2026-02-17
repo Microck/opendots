@@ -1,5 +1,10 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { motion } from 'motion/react'
+import { useState } from 'react'
 import { authClient } from '../lib/authClient'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import { navSlideDown, navStagger, navItem } from '../styles/animations'
+import ClickSpark from '../reactbits/ClickSpark'
 import styles from './Navbar.module.css'
 
 interface SessionUser {
@@ -16,45 +21,89 @@ interface NavbarProps {
 
 export default function Navbar({ isLoggedIn, user }: NavbarProps) {
   const navigate = useNavigate()
+  const prefersReducedMotion = useReducedMotion()
+  const [signingOut, setSigningOut] = useState(false)
 
   const handleSignOut = async () => {
-    await authClient.signOut()
-    navigate('/')
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await authClient.signOut()
+    } finally {
+      window.location.assign('/signin?signed_out=1')
+    }
   }
 
   return (
-    <nav className={styles.navbar}>
+    <motion.nav
+      className={styles.navbar}
+      variants={prefersReducedMotion ? undefined : navSlideDown}
+      initial="hidden"
+      animate="visible"
+    >
       <div className={`container ${styles.navInner}`}>
-        <Link to="/" className={styles.navLogo}>OPENDOTS</Link>
-        <div className={styles.navLinks}>
-          <Link to="/" className={styles.navItem}>Home</Link>
-          <Link to="/browse" className={styles.navItem}>Browse</Link>
-          <Link to="/docs" className={styles.navItem}>Docs</Link>
+        <Link
+          to="/"
+          className={styles.navLogo}
+        >
+          OPENDOTS
+        </Link>
+        <motion.div
+          className={styles.navLinks}
+          variants={prefersReducedMotion ? undefined : navStagger}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div variants={prefersReducedMotion ? undefined : navItem}>
+            <Link to="/" className={styles.navItem}>Home</Link>
+          </motion.div>
+          <motion.div variants={prefersReducedMotion ? undefined : navItem}>
+            <Link to="/browse" className={styles.navItem}>Browse</Link>
+          </motion.div>
+          <motion.div variants={prefersReducedMotion ? undefined : navItem}>
+            <Link to="/docs" className={styles.navItem}>Docs</Link>
+          </motion.div>
           {isLoggedIn ? (
             <>
-              <button
+              <motion.button
                 className={styles.authBtn}
                 onClick={() => navigate('/dashboard')}
+                variants={prefersReducedMotion ? undefined : navItem}
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.04 }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
               >
-                {user?.name || 'Dashboard'}
-              </button>
-              <button
+                <ClickSpark disabled={prefersReducedMotion} sparkColor="rgba(255,255,255,0.9)" sparkSize={10} sparkRadius={12}>
+                  <span>{user?.name || 'Dashboard'}</span>
+                </ClickSpark>
+              </motion.button>
+              <motion.button
                 className={styles.authBtnOutline}
                 onClick={handleSignOut}
+                disabled={signingOut}
+                variants={prefersReducedMotion ? undefined : navItem}
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.04 }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
               >
-                Sign Out
-              </button>
+                <ClickSpark disabled={prefersReducedMotion || signingOut} sparkColor="rgba(255,255,255,0.9)" sparkSize={10} sparkRadius={12}>
+                  <span>{signingOut ? 'Signing Out...' : 'Sign Out'}</span>
+                </ClickSpark>
+              </motion.button>
             </>
           ) : (
-            <button
+            <motion.button
               className={styles.authBtnOutline}
               onClick={() => navigate('/signin')}
+              variants={prefersReducedMotion ? undefined : navItem}
+              whileHover={prefersReducedMotion ? undefined : { scale: 1.04 }}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
             >
-              Sign In
-            </button>
+              <ClickSpark disabled={prefersReducedMotion} sparkColor="rgba(255,255,255,0.9)" sparkSize={10} sparkRadius={12}>
+                <span>Sign In</span>
+              </ClickSpark>
+            </motion.button>
           )}
-        </div>
+        </motion.div>
       </div>
-    </nav>
+    </motion.nav>
   )
 }

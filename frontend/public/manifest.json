@@ -1,0 +1,24 @@
+{
+  "name": "OpenDots",
+  "short_name": "OpenDots",
+  "description": "Discover, share, and verify OpenCode configuration bundles",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a2590",
+  "theme_color": "#0a2590",
+  "orientation": "portrait-primary",
+  "scope": "/",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/brand/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/opendots-logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}

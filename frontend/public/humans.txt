@@ -1,0 +1,17 @@
+/* TEAM */
+Developer: OpenDots Team
+Site: https://opendots.me
+GitHub: https://github.com/Microck/opendots
+Location: Global
+
+/* THANKS */
+GitHub: For authentication and repository hosting
+Vercel: For hosting and serverless infrastructure
+Turso: For database services
+Community: For contributing bundles and feedback
+
+/* SITE */
+Last update: 2026-02-17
+Standards: HTML5, CSS3, TypeScript
+Components: React, Vite, Fastify, Drizzle ORM
+Software: Better Auth, Motion, GSAP

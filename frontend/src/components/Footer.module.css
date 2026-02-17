@@ -1,10 +1,18 @@
 .footer {
   margin-top: auto;
-  border-top: 1px solid var(--border-light);
   padding: var(--space-xl) 0;
   background: var(--bg-body);
   position: relative;
   z-index: 10;
+}
+
+.topRule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border-light);
 }
 
 .content {
@@ -13,9 +21,9 @@
 }
 
 .logo {
-  font-family: var(--font-display);
+  font-family: var(--font-accent);
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 400;
   text-transform: uppercase;
 }
 
@@ -33,12 +41,48 @@
 }
 
 .link {
-  font-family: var(--font-body);
+  font-family: var(--font-accent);
   text-transform: uppercase;
   font-size: 0.8rem;
   letter-spacing: 0.05em;
-  font-weight: 500;
+  font-weight: 400;
   color: var(--text-muted);
-  transition: color 0.2s;
+  transition: color 0.25s;
+  position: relative;
+  display: inline-block;
+  line-height: 1;
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: transparent;
+  text-underline-offset: 1px;
+  text-decoration-skip-ink: auto;
 }
 .link:hover { color: var(--text-main); }
+.link:hover { text-decoration-color: var(--text-main); }
+
+.bottom {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-lg);
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--border-light);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+.bottom a {
+  color: var(--text-muted);
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.bottom a:hover {
+  color: var(--text-main);
+}
+
+.contact,
+.github {
+  display: flex;
+  gap: var(--space-sm);
+}

@@ -1,21 +1,64 @@
+import { motion } from 'motion/react'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import {
+  fadeInDown,
+  fadeInUp,
+  sectionReveal,
+  staggerContainer,
+  staggerItem,
+  drawLine,
+  scrollViewports,
+} from '../styles/animations'
 import styles from './Docs.module.css'
+import { SITE_BASE_URL, siteUrl } from '../lib/siteBase'
 
 export default function Docs() {
+  const prefersReducedMotion = useReducedMotion()
+
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined) || SITE_BASE_URL
+  const url = (base: string, pathname: string) =>
+    `${base.replace(/\/$/, '')}${pathname}`
+
+  const v = (variants: import('motion/react').Variants) =>
+    prefersReducedMotion ? undefined : variants
+
   return (
     <div className={styles.page}>
       <div className="container" style={{ maxWidth: '800px' }}>
-        <h1 style={{ marginBottom: 'var(--space-xl)' }}>DOCUMENTATION</h1>
+        <motion.h1
+          className={styles.docsTitle}
+          style={{ marginBottom: 'var(--space-xl)' }}
+          variants={v(fadeInDown)}
+          initial="hidden"
+          animate="visible"
+        >
+          DOCUMENTATION
+        </motion.h1>
+
+        <motion.div
+          className={styles.titleRule}
+          variants={v(drawLine)}
+          initial="hidden"
+          animate="visible"
+          style={{ transformOrigin: 'left center' }}
+        />
 
         <article className={styles.article}>
           {/* What is a bundle? */}
-          <section className={styles.section}>
+          <motion.section
+            className={styles.section}
+            variants={v(sectionReveal)}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
             <h2 className={styles.sectionTitle}>What is a bundle?</h2>
-            <p className={styles.paragraph}>
+            <p className={styles.paragraph} data-gsap="text">
               A bundle is a collection of OpenCode configuration artifacts that customize and extend 
               your AI coding assistant. Bundles can contain themes, custom commands, specialized agents, 
               skill definitions, plugins, tools, rules, and configuration files.
             </p>
-            <p className={styles.paragraph}>
+            <p className={styles.paragraph} data-gsap="text">
               Bundles are distributed as GitHub repositories containing OpenCode configuration.
               Any public GitHub repo with OpenCode artifacts can be registered as a bundle.
               An optional <code>opendots.yml</code> manifest can provide rich metadata, but is not required —
@@ -39,16 +82,36 @@ export default function Docs() {
 └── package.json          # Plugin dependencies (if needed)`}
               </pre>
             </div>
-          </section>
+          </motion.section>
 
           {/* Install Destinations */}
-          <section className={styles.section}>
+          <motion.section
+            className={styles.section}
+            variants={v(sectionReveal)}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
             <h2 className={styles.sectionTitle}>Install Destinations</h2>
             <p className={styles.paragraph}>
-              Bundles can be installed in two scopes: <strong>Project</strong> or <strong>Global</strong>. 
-              Choose the scope based on whether you want the configuration to apply to a single project 
-              or all your projects.
+              <strong>Recommended:</strong> use the AI install protocol first. It forces a safety review,
+              conflict checks, and explicit scope selection before any files are written.
             </p>
+
+            <div className={styles.infoCard}>
+              <strong className="text-mono">AI-First Install (Recommended)</strong>
+              <p className={styles.infoText}>
+                Copy this prompt into OpenCode (or any coding agent). It fetches the official
+                installation protocol and applies it to a specific bundle ID:
+              </p>
+              <pre className={styles.codeBlock}>
+{`Fetch and follow ${siteUrl('/INSTALL.md')} for bundle URL: ${siteUrl('/bundle/<bundle-id>')}`}
+              </pre>
+              <p className={styles.infoText} style={{ marginTop: 'var(--space-sm)' }}>
+                This is the safest default because it includes risk badge review, secret warning checks,
+                and overwrite confirmation.
+              </p>
+            </div>
 
             <div className={styles.infoCard}>
               <strong className="text-mono">Project Scope</strong>
@@ -59,10 +122,10 @@ export default function Docs() {
               </p>
               <pre className={styles.codeBlock}>
 {`# Install project-scoped bundle
-cd my-project
-curl -L https://opendots.dev/api/bundles/xyz/download?variant=project -o bundle.zip
-unzip bundle.zip
-rm bundle.zip`}
+ cd my-project
+ curl -L ${url(apiBase, '/api/bundles/xyz/download?variant=project')} -o bundle.zip
+ unzip bundle.zip
+ rm bundle.zip`}
               </pre>
               <p className={styles.infoText} style={{ marginTop: 'var(--space-sm)' }}>
                 <strong>Use when:</strong> Team-specific conventions, project-specific tools, 
@@ -79,9 +142,9 @@ rm bundle.zip`}
               </p>
               <pre className={styles.codeBlock}>
 {`# Install global bundle
-curl -L https://opendots.dev/api/bundles/xyz/download?variant=global -o bundle.zip
-unzip bundle.zip -d ~/.config/opencode/
-rm bundle.zip`}
+ curl -L ${url(apiBase, '/api/bundles/xyz/download?variant=global')} -o bundle.zip
+ unzip bundle.zip -d ~/.config/opencode/
+ rm bundle.zip`}
               </pre>
               <p className={styles.infoText} style={{ marginTop: 'var(--space-sm)' }}>
                 <strong>Use when:</strong> Personal preferences, frequently used tools, 
@@ -102,10 +165,16 @@ export OPENCODE_CONFIG_DIR=/path/to/custom/config
 opencode`}
               </pre>
             </div>
-          </section>
+          </motion.section>
 
           {/* Safety Model */}
-          <section className={styles.section}>
+          <motion.section
+            className={styles.section}
+            variants={v(sectionReveal)}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
             <h2 className={styles.sectionTitle}>Safety Model</h2>
             
             <div className={styles.warningCard}>
@@ -122,11 +191,11 @@ opencode`}
 
             <p className={styles.paragraph}>
               Bundles are powerful—they can execute arbitrary code through plugins, tools, shell 
-              commands, and scripts. While Opendots performs best-effort scanning to help you 
+              commands, and scripts. While OpenDots performs best-effort scanning to help you 
               evaluate bundles, <strong>we do not guarantee safety</strong>.
             </p>
 
-            <h3 className={styles.subsectionTitle}>What Opendots Scans</h3>
+            <h3 className={styles.subsectionTitle}>What OpenDots Scans</h3>
             <ul className={styles.list}>
               <li>
                 <strong>Schema Validation:</strong> Verifies that configuration files follow 
@@ -143,24 +212,30 @@ opencode`}
             </ul>
 
             <h3 className={styles.subsectionTitle}>Risk Badges Explained</h3>
-            <div className={styles.riskTable}>
-              <div className={styles.riskRow}>
+            <motion.div
+              className={styles.riskTable}
+              variants={v(staggerContainer)}
+              initial="hidden"
+              whileInView="visible"
+              viewport={scrollViewports.once}
+            >
+              <motion.div className={styles.riskRow} variants={v(staggerItem)}>
                 <span className={styles.riskBadgeHigh}>EXEC</span>
                 <span>Process execution calls (exec, spawn, child_process)</span>
-              </div>
-              <div className={styles.riskRow}>
+              </motion.div>
+              <motion.div className={styles.riskRow} variants={v(staggerItem)}>
                 <span className={styles.riskBadgeMedium}>SHELL</span>
                 <span>Shell commands or shell scripts</span>
-              </div>
-              <div className={styles.riskRow}>
+              </motion.div>
+              <motion.div className={styles.riskRow} variants={v(staggerItem)}>
                 <span className={styles.riskBadgeLow}>REMOTE</span>
                 <span>Remote URLs and network requests</span>
-              </div>
-              <div className={styles.riskRow}>
+              </motion.div>
+              <motion.div className={styles.riskRow} variants={v(staggerItem)}>
                 <span className={styles.riskBadgeHigh}>EVAL</span>
                 <span>Dynamic code evaluation (eval, Function constructor)</span>
-              </div>
-            </div>
+              </motion.div>
+            </motion.div>
 
             <p className={styles.paragraph}>
               <strong>Best Practices:</strong> Always review the bundle contents using the file 
@@ -168,64 +243,100 @@ opencode`}
               feedback, recent activity, and the author's reputation. When in doubt, install 
               in a project scope first before promoting to global.
             </p>
-          </section>
+          </motion.section>
 
           {/* How to Publish */}
-          <section className={styles.section}>
+          <motion.section
+            className={styles.section}
+            variants={v(sectionReveal)}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
             <h2 className={styles.sectionTitle}>How to Publish</h2>
             <p className={styles.paragraph}>
-              Sharing your OpenCode configuration with the community is easy. Follow these steps 
-              to publish your bundle on Opendots:
+              <strong>Recommended:</strong> use the AI publish protocol so your agent handles secret
+              sanitization, bundle structure validation, manifest creation, and GitHub push safely.
             </p>
 
-            <ol className={styles.numberedList}>
-              <li>
-                <strong>Sign in with GitHub</strong> — Click the Sign In button on Opendots 
+            <div className={styles.infoCard}>
+              <strong className="text-mono">AI-First Publish (Recommended)</strong>
+              <p className={styles.infoText}>
+                Copy this prompt into OpenCode (or any coding agent):
+              </p>
+              <pre className={styles.codeBlock}>
+{`Fetch and follow ${siteUrl('/PUBLISH.md')}`}
+              </pre>
+              <p className={styles.infoText} style={{ marginTop: 'var(--space-sm)' }}>
+                This protocol includes mandatory secret checks and a canonical publishing workflow.
+              </p>
+            </div>
+
+            <motion.ol
+              className={styles.numberedList}
+              variants={v(staggerContainer)}
+              initial="hidden"
+              whileInView="visible"
+              viewport={scrollViewports.once}
+            >
+              <motion.li variants={v(staggerItem)}>
+                <strong>Run the AI publish protocol</strong> — Use
+                <code> Fetch and follow {siteUrl('/PUBLISH.md')} </code>
+                as your default path.
+              </motion.li>
+              <motion.li variants={v(staggerItem)}>
+                <strong>Sign in with GitHub</strong> — Click the Sign In button on OpenDots 
                 to authenticate with your GitHub account.
-              </li>
-              <li>
+              </motion.li>
+              <motion.li variants={v(staggerItem)}>
                 <strong>Create your repository</strong> — Create a new public GitHub repository 
-                named <code>opendots-&lt;your-bundle-name&gt;</code>. The <code>opendots-</code> prefix is required.
-              </li>
-              <li>
-                <strong>Add required manifest</strong> — Add an <code>opendots.yml</code> manifest 
-                at the repository root. This file is required and must include:
+                named <code>opendots-&lt;your-github-username&gt;</code>. This is the canonical naming convention.
+              </motion.li>
+              <motion.li variants={v(staggerItem)}>
+                <strong>Manifest is optional</strong> — If your repository does not include an
+                <code> opendots.yml </code> file, OpenDots auto-generates one from your detected files:
                 <pre className={styles.codeBlock}>
 {`id: my-bundle
 name: My Bundle Name
 summary: Brief description of your bundle
 license: MIT`}
                 </pre>
-              </li>
-              <li>
+              </motion.li>
+              <motion.li variants={v(staggerItem)}>
                 <strong>Add your configuration</strong> — Add your <code>opencode.json</code>, 
                 themes, skills, and other artifacts to the repository.
-              </li>
-              <li>
-                <strong>Register on Opendots</strong> — Visit your Dashboard, click "Register Bundle", 
-                and paste your GitHub repository URL.
-              </li>
-              <li>
-                <strong>System validates and imports</strong> — Opendots will clone your repo, 
+              </motion.li>
+              <motion.li variants={v(staggerItem)}>
+                <strong>Register on OpenDots</strong> — Visit your Dashboard and use one-click publish.
+                OpenDots auto-detects <code>opendots-&lt;your-github-username&gt;</code> after sign-in.
+              </motion.li>
+              <motion.li variants={v(staggerItem)}>
+                <strong>System validates and imports</strong> — OpenDots will clone your repo, 
                 validate the naming convention and manifest, scan for safety issues, and create your bundle page.
-              </li>
-            </ol>
+              </motion.li>
+            </motion.ol>
 
             <div className={styles.infoCard}>
               <strong className="text-mono">Tips for Success</strong>
               <ul className={styles.list}>
                 <li>Keep your bundle focused on a specific use case or tech stack</li>
                 <li>Write a clear, compelling summary in your manifest</li>
-                <li>Include helpful tags so users can discover your bundle</li>
+                <li>Keep your bundle metadata accurate (name, summary, compatibility)</li>
                 <li>Test your configuration locally before publishing</li>
                 <li>Keep sensitive data out of your repository</li>
                 <li>Update your bundle regularly to keep it relevant</li>
               </ul>
             </div>
-          </section>
+          </motion.section>
 
           {/* Getting Help */}
-          <section className={styles.section}>
+          <motion.section
+            className={styles.section}
+            variants={v(fadeInUp)}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
             <h2 className={styles.sectionTitle}>Getting Help</h2>
             <p className={styles.paragraph}>
               Have questions or need assistance? Here are some resources:
@@ -236,7 +347,7 @@ license: MIT`}
                 GitHub repository via the "View on GitHub" link on the bundle page.
               </li>
               <li>
-                <strong>Opendots Platform:</strong> For issues with the Opendots platform itself, 
+                <strong>OpenDots Platform:</strong> For issues with the OpenDots platform itself, 
                 visit our GitHub repository to open an issue.
               </li>
               <li>
@@ -244,7 +355,7 @@ license: MIT`}
                 in the official documentation.
               </li>
             </ul>
-          </section>
+          </motion.section>
         </article>
       </div>
     </div>

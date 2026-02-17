@@ -31,6 +31,16 @@ const TEXT_EXTENSIONS = new Set([
   '.py', '.rb', '.go', '.rs', '.java', '.cpp', '.c', '.h', '.hpp',
 ]);
 
+const EXTENSIONLESS_TEXT_FILES = new Set([
+  'makefile',
+  'dockerfile',
+  'brewfile',
+  'justfile',
+  'readme',
+  'license',
+  'licence',
+]);
+
 function isBinaryFile(fileName: string): boolean {
   const ext = path.extname(fileName).toLowerCase();
   return BINARY_EXTENSIONS.has(ext);
@@ -38,13 +48,35 @@ function isBinaryFile(fileName: string): boolean {
 
 function isPreviewableFile(fileName: string): boolean {
   const ext = path.extname(fileName).toLowerCase();
+  if (!ext) {
+    return EXTENSIONLESS_TEXT_FILES.has(fileName.toLowerCase());
+  }
   return TEXT_EXTENSIONS.has(ext);
 }
 
 function getFileKind(filePath: string): FileIndexEntry['kind'] {
-  const normalizedPath = filePath.toLowerCase();
-  const fileName = path.basename(filePath); // Keep original case for AGENTS.md etc.
+  const pathParts = filePath.split('/').filter(Boolean);
+  const relativePath = pathParts.length > 1 ? pathParts.slice(1).join('/') : filePath;
+  const normalizedPath = relativePath.toLowerCase();
+  const fileName = path.basename(relativePath); // Keep original case for AGENTS.md etc.
   const fileNameLower = fileName.toLowerCase();
+
+  // Common dotfiles at repo root
+  if ([
+    '.zshrc',
+    '.bashrc',
+    '.bash_profile',
+    '.profile',
+    '.bash_aliases',
+    '.aliases',
+    '.tmux.conf',
+  ].includes(fileNameLower)) {
+    return 'script';
+  }
+
+  if (['.gitconfig', '.vimrc', '.editorconfig', '.npmrc'].includes(fileNameLower)) {
+    return 'config';
+  }
   
   // Config files at root
   if (fileNameLower === 'opencode.json' || fileNameLower === 'opencode.jsonc' || 
@@ -71,7 +103,12 @@ function getFileKind(filePath: string): FileIndexEntry['kind'] {
   if (normalizedPath.match(/^(\.opencode\/)?commands?\//)) {
     return 'command';
   }
-  
+
+  // Disabled plugin stash - under disabled-plugins/ or .opencode/disabled-plugins/
+  if (normalizedPath.match(/^(\.opencode\/)?disabled-plugins\//)) {
+    return 'plugin';
+  }
+
   // Plugin files - under plugins/ or .opencode/plugins/
   if (normalizedPath.match(/^(\.opencode\/)?plugins?\//)) {
     return 'plugin';

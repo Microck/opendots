@@ -4,7 +4,7 @@ import { importRun, snapshot } from '../db/schema/imports';
 import { publisherBundle } from '../db/schema/publisher';
 import { eq, desc, and } from 'drizzle-orm';
 import { createGitHubClient, getRepoInfo } from '../github/githubClient';
-import { saveSnapshot, snapshotExists } from '../storage/snapshots';
+import { saveSnapshot } from '../storage/snapshots';
 import { buildFileIndex, extractFileFromZip, type FileIndexEntry } from './fileIndex';
 import { validateSnapshot } from './validator';
 import { scanForRisks } from './riskScanner';
@@ -96,7 +96,24 @@ export async function importBundle(
         throw new Error('No data received from GitHub');
       }
 
-      const zipBuffer = Buffer.from(await (zipResponse.data as any).arrayBuffer());
+      const responseData = zipResponse.data as any;
+      let zipBuffer: Buffer;
+
+      if (responseData instanceof ArrayBuffer) {
+        zipBuffer = Buffer.from(responseData);
+      } else if (ArrayBuffer.isView(responseData)) {
+        zipBuffer = Buffer.from(
+          responseData.buffer,
+          responseData.byteOffset,
+          responseData.byteLength
+        );
+      } else if (Buffer.isBuffer(responseData)) {
+        zipBuffer = responseData;
+      } else if (typeof responseData?.arrayBuffer === 'function') {
+        zipBuffer = Buffer.from(await responseData.arrayBuffer());
+      } else {
+        throw new Error('Unsupported zip payload type from GitHub download API');
+      }
 
       if (zipBuffer.length > MAX_ZIP_SIZE_BYTES) {
         throw new Error(`Snapshot too large: ${zipBuffer.length} bytes (max ${MAX_ZIP_SIZE_BYTES})`);
@@ -104,17 +121,18 @@ export async function importBundle(
 
       const snapshotInfo = await saveSnapshot(bundleId, commitSha, zipBuffer);
 
-      // Build file index from the saved snapshot
-      const fileIndex = buildFileIndex(snapshotInfo.path);
-      const accentColor = extractAccentColorFromSnapshot(snapshotInfo.path, fileIndex);
+      // Build file index from the local snapshot
+      const fileIndex = buildFileIndex(snapshotInfo.localPath);
+      const manifestAccentColor = extractAccentColorFromManifest(bundleData.manifestJson);
+      const accentColor = manifestAccentColor ?? extractAccentColorFromSnapshot(snapshotInfo.localPath, fileIndex);
 
       // Run safety scans on extracted snapshot
-      const safetyResults = await runSafetyScans(snapshotInfo.path);
+      const safetyResults = await runSafetyScans(snapshotInfo.localPath);
 
       await db.insert(snapshot).values({
         bundleId,
         commitSha,
-        storagePath: snapshotInfo.path,
+        storagePath: snapshotInfo.storagePath,
         byteSize: snapshotInfo.byteSize,
         fileIndex: JSON.stringify(fileIndex),
         safetyResults: JSON.stringify(safetyResults),
@@ -182,6 +200,156 @@ export async function importBundle(
   } catch (error: any) {
     console.error('Import error:', error);
 
+    return {
+      success: false,
+      error: {
+        code: 'IMPORT_ERROR',
+        message: error.message || 'Import failed',
+      },
+    };
+  }
+}
+
+// Import a bundle from a public GitHub repository without requiring a user access token.
+// Used by the publish-with-claim flow.
+export async function importBundlePublic(bundleId: string): Promise<ImportResult> {
+  try {
+    const bundle = await db.select()
+      .from(publisherBundle)
+      .where(eq(publisherBundle.id, bundleId))
+      .limit(1);
+
+    if (!bundle || !bundle[0]) {
+      return {
+        success: false,
+        error: {
+          code: 'BUNDLE_NOT_FOUND',
+          message: 'Bundle not found',
+        },
+      };
+    }
+
+    const bundleData = bundle[0];
+    const { githubOwner, githubRepo } = bundleData;
+
+    const { getPublicRepoInfo, getPublicHeadCommitSha, downloadPublicZipball } = await import('../github/publicGitHub');
+
+    const repoInfo = await getPublicRepoInfo(githubOwner, githubRepo);
+    if (!repoInfo) {
+      return {
+        success: false,
+        error: {
+          code: 'REPO_NOT_FOUND',
+          message: 'Repository not found on GitHub',
+        },
+      };
+    }
+
+    const defaultBranch = repoInfo.default_branch || 'HEAD';
+    const commitSha = await getPublicHeadCommitSha(githubOwner, githubRepo, defaultBranch);
+    if (!commitSha) {
+      return {
+        success: false,
+        error: {
+          code: 'COMMIT_NOT_FOUND',
+          message: 'Failed to determine repository HEAD commit',
+        },
+      };
+    }
+
+    const importRunId = crypto.randomUUID();
+
+    await db.insert(importRun).values({
+      id: importRunId,
+      bundleId,
+      status: 'pending',
+      commitSha,
+      startedAt: new Date(),
+    });
+
+    try {
+      const zipBuffer = await downloadPublicZipball({
+        owner: githubOwner,
+        repo: githubRepo,
+        ref: commitSha,
+        timeoutMs: FETCH_TIMEOUT_MS,
+      });
+
+      if (zipBuffer.length > MAX_ZIP_SIZE_BYTES) {
+        throw new Error(`Snapshot too large: ${zipBuffer.length} bytes (max ${MAX_ZIP_SIZE_BYTES})`);
+      }
+
+      const snapshotInfo = await saveSnapshot(bundleId, commitSha, zipBuffer);
+
+      const fileIndex = buildFileIndex(snapshotInfo.localPath);
+      const manifestAccentColor = extractAccentColorFromManifest(bundleData.manifestJson);
+      const accentColor = manifestAccentColor ?? extractAccentColorFromSnapshot(snapshotInfo.localPath, fileIndex);
+
+      const safetyResults = await runSafetyScans(snapshotInfo.localPath);
+
+      await db.insert(snapshot).values({
+        bundleId,
+        commitSha,
+        storagePath: snapshotInfo.storagePath,
+        byteSize: snapshotInfo.byteSize,
+        fileIndex: JSON.stringify(fileIndex),
+        safetyResults: JSON.stringify(safetyResults),
+      });
+
+      await db.update(publisherBundle)
+        .set({
+          updatedAt: new Date(),
+          accentColor,
+          stars: repoInfo.stargazers_count,
+          forks: repoInfo.forks_count,
+          defaultBranch: repoInfo.default_branch,
+          repoHtmlUrl: repoInfo.html_url,
+          githubRepoId: repoInfo.id,
+        })
+        .where(eq(publisherBundle.id, bundleId));
+
+      await db.update(importRun)
+        .set({
+          status: 'success',
+          finishedAt: new Date(),
+        })
+        .where(eq(importRun.id, importRunId));
+
+      return {
+        success: true,
+        commitSha,
+        importRunId,
+      };
+    } catch (fetchError: any) {
+      let errorCode = 'FETCH_FAILED';
+      let errorMessage = fetchError.message || 'Failed to download repository';
+
+      if (fetchError.name === 'AbortError') {
+        errorCode = 'TIMEOUT';
+        errorMessage = 'Repository download timed out';
+      }
+
+      await db.update(importRun)
+        .set({
+          status: 'failure',
+          finishedAt: new Date(),
+          errorCode,
+          errorMessage,
+        })
+        .where(eq(importRun.id, importRunId));
+
+      return {
+        success: false,
+        error: {
+          code: errorCode,
+          message: errorMessage,
+        },
+        commitSha,
+        importRunId,
+      };
+    }
+  } catch (error: any) {
+    console.error('Public import error:', error);
     return {
       success: false,
       error: {
@@ -314,6 +482,24 @@ function extractAccentColorFromSnapshot(zipPath: string, fileIndex: FileIndexEnt
   }
 
   return null;
+}
+
+function extractAccentColorFromManifest(manifestJson: string | null): string | null {
+  if (!manifestJson) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(manifestJson) as Record<string, unknown>;
+    const accentCandidate = parsed.accentColor;
+    if (typeof accentCandidate !== 'string') {
+      return null;
+    }
+
+    return normalizeHexColor(accentCandidate);
+  } catch {
+    return null;
+  }
 }
 
 function isThemeFile(file: FileIndexEntry): boolean {

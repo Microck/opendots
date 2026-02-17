@@ -1,7 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Highlight, themes } from 'prism-react-renderer'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import {
   Gear,
   Palette,
@@ -16,8 +13,13 @@ import {
   Play,
   File,
   FileArchive,
+  Folder,
+  FolderOpen,
 } from '@phosphor-icons/react'
 import styles from './CodeExplorer.module.css'
+import { apiUrl } from '../lib/apiBase'
+
+const CodeContentRenderer = lazy(() => import('./CodeContentRenderer'))
 
 interface FileIndexEntry {
   path: string
@@ -36,6 +38,14 @@ interface FileContent {
   content: string
   loading: boolean
   error: string | null
+}
+
+type TreeNode = {
+  type: 'dir' | 'file'
+  name: string
+  path: string
+  children?: TreeNode[]
+  file?: FileIndexEntry
 }
 
 // Get file extension for language detection
@@ -72,15 +82,63 @@ function getLanguage(path: string): string {
   return langMap[ext] || 'text'
 }
 
-// Get display name from path
-function getDisplayName(path: string): string {
-  return path.split('/').pop() || path
+function buildFileTree(files: FileIndexEntry[]): TreeNode {
+  const root: TreeNode = { type: 'dir', name: '', path: '', children: [] }
+
+  for (const file of files) {
+    const parts = file.path.split('/')
+    let current = root
+    let currentPath = ''
+
+    parts.forEach((part, index) => {
+      currentPath = currentPath ? `${currentPath}/${part}` : part
+
+      if (index === parts.length - 1) {
+        current.children?.push({
+          type: 'file',
+          name: part,
+          path: currentPath,
+          file,
+        })
+        return
+      }
+
+      let next = current.children?.find(
+        (child) => child.type === 'dir' && child.name === part
+      )
+
+      if (!next) {
+        next = { type: 'dir', name: part, path: currentPath, children: [] }
+        current.children?.push(next)
+      }
+
+      current = next
+    })
+  }
+
+  return sortTree(root)
 }
 
-// Get indentation level based on path depth
-function getIndentLevel(path: string): number {
-  const depth = path.split('/').length - 1
-  return depth * 16 // 16px per level
+function sortTree(node: TreeNode): TreeNode {
+  if (node.children) {
+    node.children.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === 'dir' ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+    node.children = node.children.map(sortTree)
+  }
+  return node
+}
+
+function getParentPaths(filePath: string): string[] {
+  const parts = filePath.split('/')
+  const paths: string[] = []
+  for (let i = 0; i < parts.length - 1; i += 1) {
+    paths.push(parts.slice(0, i + 1).join('/'))
+  }
+  return paths
 }
 
 // Get icon based on file kind
@@ -120,6 +178,15 @@ function getFileIcon(kind: FileIndexEntry['kind'], isBinary: boolean): React.Rea
 export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
   const [activeFile, setActiveFile] = useState<string | null>(null)
   const [fileContents, setFileContents] = useState<Map<string, FileContent>>(new Map())
+  const [openFolders, setOpenFolders] = useState<Set<string>>(new Set())
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   const fetchFileContent = useCallback(async (path: string) => {
     // Don't fetch if already loading or loaded
@@ -129,6 +196,7 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
     }
 
     // Mark as loading
+    if (!mountedRef.current) return
     setFileContents(prev => {
       const next = new Map(prev)
       next.set(path, { content: '', loading: true, error: null })
@@ -136,9 +204,10 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
     })
 
     try {
-      const response = await fetch(`/api/bundles/${bundleId}/file?path=${encodeURIComponent(path)}`)
+      const response = await fetch(apiUrl(`/api/bundles/${bundleId}/file?path=${encodeURIComponent(path)}`))
       
       if (response.status === 413) {
+        if (!mountedRef.current) return
         setFileContents(prev => {
           const next = new Map(prev)
           next.set(path, { content: '', loading: false, error: 'File too large to preview (max 100KB)' })
@@ -148,6 +217,7 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
       }
 
       if (response.status === 400) {
+        if (!mountedRef.current) return
         setFileContents(prev => {
           const next = new Map(prev)
           next.set(path, { content: '', loading: false, error: 'Binary file - not previewable' })
@@ -161,12 +231,14 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
       }
 
       const content = await response.text()
+      if (!mountedRef.current) return
       setFileContents(prev => {
         const next = new Map(prev)
         next.set(path, { content, loading: false, error: null })
         return next
       })
     } catch (error) {
+      if (!mountedRef.current) return
       setFileContents(prev => {
         const next = new Map(prev)
         next.set(path, { 
@@ -190,36 +262,102 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
   // Set first previewable file as active on mount
   useEffect(() => {
     if (!activeFile && files.length > 0) {
+      const readmeRoot = files.find(f => f.path.toLowerCase() === 'readme.md')
+      const readmeNested = files.find(f => f.path.toLowerCase().endsWith('/readme.md'))
+      const readme = readmeRoot ?? readmeNested
       const firstPreviewable = files.find(f => f.isPreviewable && !f.isBinary)
-      if (firstPreviewable) {
-        setActiveFile(firstPreviewable.path)
-        fetchFileContent(firstPreviewable.path)
-      } else {
-        setActiveFile(files[0].path)
+      const preferred = readme ?? firstPreviewable ?? files[0]
+      if (preferred) {
+        setActiveFile(preferred.path)
+        if (preferred.isPreviewable && !preferred.isBinary) {
+          fetchFileContent(preferred.path)
+        }
       }
     }
   }, [files, activeFile, fetchFileContent])
+
+  useEffect(() => {
+    if (!activeFile) {
+      return
+    }
+    const parents = getParentPaths(activeFile)
+    setOpenFolders((prev) => {
+      const next = new Set(prev)
+      for (const parent of parents) {
+        next.add(parent)
+      }
+      return next
+    })
+  }, [activeFile])
+
+  const tree = useMemo(() => buildFileTree(files), [files])
+
+  const toggleFolder = useCallback((folderPath: string) => {
+    setOpenFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(folderPath)) {
+        next.delete(folderPath)
+      } else {
+        next.add(folderPath)
+      }
+      return next
+    })
+  }, [])
 
   const activeContent = activeFile ? fileContents.get(activeFile) : null
   const activeFileData = activeFile ? files.find(f => f.path === activeFile) : null
   const isMarkdown = activeFile?.toLowerCase().endsWith('.md')
 
+  const renderNodes = (nodes: TreeNode[], depth: number): React.ReactNode =>
+    nodes.map((node) => {
+      if (node.type === 'dir') {
+        const isOpen = openFolders.has(node.path)
+        return (
+          <div key={node.path}>
+            <div
+              className={`${styles.folderItem} ${isOpen ? styles.folderOpen : ''}`}
+              style={{ paddingLeft: `${8 + depth * 16}px` }}
+              onClick={() => toggleFolder(node.path)}
+              title={node.path}
+            >
+              <span className={styles.folderCaret} aria-hidden>
+                {isOpen ? 'v' : '>'}
+              </span>
+              <span className={styles.fileIcon}>
+                {isOpen ? <FolderOpen size={16} aria-hidden /> : <Folder size={16} aria-hidden />}
+              </span>
+              <span className={styles.folderName}>{node.name}</span>
+            </div>
+            {isOpen && node.children ? renderNodes(node.children, depth + 1) : null}
+          </div>
+        )
+      }
+
+      if (!node.file) {
+        return null
+      }
+
+      const file = node.file
+      return (
+        <div
+          key={node.path}
+          className={`${styles.fileItem} ${activeFile === file.path ? styles.active : ''} ${!file.isPreviewable || file.isBinary ? styles.disabled : ''}`}
+          style={{ paddingLeft: `${8 + depth * 16}px` }}
+          onClick={() => handleFileClick(file.path)}
+          title={file.path}
+        >
+          <span className={styles.folderCaretSpacer} aria-hidden />
+          <span className={styles.fileIcon}>{getFileIcon(file.kind, file.isBinary)}</span>
+          <span className={styles.fileName}>{node.name}</span>
+          {file.isBinary && <span className={styles.binaryTag}>binary</span>}
+        </div>
+      )
+    })
+
   return (
     <div className={styles.explorer}>
       <div className={styles.fileTree}>
-        {files.map((file) => (
-          <div
-            key={file.path}
-            className={`${styles.fileItem} ${activeFile === file.path ? styles.active : ''} ${!file.isPreviewable || file.isBinary ? styles.disabled : ''}`}
-            style={{ paddingLeft: `${8 + getIndentLevel(file.path)}px` }}
-            onClick={() => handleFileClick(file.path)}
-            title={file.path}
-          >
-            <span className={styles.fileIcon}>{getFileIcon(file.kind, file.isBinary)}</span>
-            <span className={styles.fileName}>{getDisplayName(file.path)}</span>
-            {file.isBinary && <span className={styles.binaryTag}>binary</span>}
-          </div>
-        ))}
+        {renderNodes(tree.children ?? [], 0)}
       </div>
       <div className={styles.codeView}>
         {activeFile && activeContent?.loading && (
@@ -239,32 +377,13 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
               </span>
             </div>
             
-            {isMarkdown ? (
-              <div className={styles.markdownContent}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
-                  {activeContent.content}
-                </ReactMarkdown>
-              </div>
-            ) : (
-              <Highlight
-                theme={themes.dracula}
-                code={activeContent.content}
+            <Suspense fallback={<div className={styles.loading}>Rendering preview...</div>}>
+              <CodeContentRenderer
+                content={activeContent.content}
+                isMarkdown={Boolean(isMarkdown)}
                 language={getLanguage(activeFile)}
-              >
-                {({ className, style, tokens, getLineProps, getTokenProps }) => (
-                  <pre className={`${className} ${styles.codePre}`} style={style}>
-                    {tokens.map((line, i) => (
-                      <div key={i} {...getLineProps({ line })}>
-                        <span className={styles.lineNumber}>{i + 1}</span>
-                        {line.map((token, key) => (
-                          <span key={key} {...getTokenProps({ token })} />
-                        ))}
-                      </div>
-                    ))}
-                  </pre>
-                )}
-              </Highlight>
-            )}
+              />
+            </Suspense>
           </>
         )}
         

@@ -1,19 +1,54 @@
 .page {
   padding-top: var(--space-2xl);
   padding-bottom: var(--space-2xl);
-  animation: fadeIn 0.3s ease;
+}
+
+.masthead {
+  --rx-blueprint-opacity: 0.2;
+  --rx-pulse-opacity: 0.18;
+  --rx-shift-x: 0px;
+  --rx-shift-y: 0px;
+  --rx-spot-x: 50%;
+  --rx-spot-y: 50%;
+  --rx-scale: 0.9;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.mastheadBlueprint {
+  position: absolute;
+  inset: 2px 0 18px;
+  border: 1px solid rgba(132, 202, 230, 0.18);
+  pointer-events: none;
+  z-index: 0;
+  opacity: var(--rx-blueprint-opacity);
+  transform: translate3d(var(--rx-shift-x), var(--rx-shift-y), 0);
+  transition: opacity 180ms ease;
+  background: transparent;
 }
 
 .headerRow {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: var(--space-lg);
+  margin-bottom: var(--space-sm);
   gap: var(--space-md);
+  position: relative;
+  z-index: 1;
+}
+
+.headerRule {
+  height: 1px;
+  background: var(--border-light);
+  margin-bottom: var(--space-lg);
+  position: relative;
+  z-index: 1;
 }
 
 .statusText {
-  font-family: var(--font-mono);
+  font-family: var(--font-accent);
   font-size: 0.72rem;
   color: var(--text-dim);
   text-transform: uppercase;
@@ -31,7 +66,7 @@
 
 .controlRow {
   display: grid;
-  grid-template-columns: 1.6fr minmax(140px, 220px) minmax(140px, 1fr);
+  grid-template-columns: minmax(140px, 220px) minmax(140px, 1fr);
   gap: var(--space-md);
   align-items: end;
 }
@@ -43,7 +78,7 @@
 }
 
 .controlLabel {
-  font-family: var(--font-mono);
+  font-family: var(--font-accent);
   font-size: 0.72rem;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -85,7 +120,7 @@
   border: 1px solid var(--border-light);
   padding: 10px 12px;
   color: var(--text-muted);
-  font-family: var(--font-mono);
+  font-family: var(--font-accent);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -99,7 +134,7 @@
 
 .filterGrid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
   gap: var(--space-md);
 }
 
@@ -120,7 +155,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  font-family: var(--font-mono);
+  font-family: var(--font-accent);
   font-size: 0.72rem;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -165,5 +200,12 @@
 
   .filterGrid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mastheadBlueprint,
+  .masthead {
+    transform: none;
   }
 }

@@ -6,7 +6,8 @@ import { snapshot, importRun } from '../db/schema/imports';
 import { eq, desc } from 'drizzle-orm';
 import { extractFileFromZip } from '../import/fileIndex';
 import { generateZipStream, isValidVariant } from '../import/zipGenerator';
-import fs from 'fs/promises';
+import { parse as parseJsonc } from 'comment-json';
+import { materializeSnapshotToLocal } from '../storage/snapshots';
 
 const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
 
@@ -24,13 +25,29 @@ interface BundleCardResponse {
   slug: string;
   name: string;
   summary: string;
+  owner: string;
+  ownerAvatarUrl: string;
   tags: string[];
   artifactTypes: string[];
   riskBadges: string[];
   accentColor: string | null;
+  cardTheme: BundleCardTheme | null;
   stars: number;
   forks: number;
   updatedAt: string;
+}
+
+interface BundleCardTheme {
+  background?: string;
+  backgroundHover?: string;
+  border?: string;
+  borderHover?: string;
+  title?: string;
+  text?: string;
+  mutedText?: string;
+  chipBackground?: string;
+  chipBorder?: string;
+  chipText?: string;
 }
 
 interface ParsedManifest {
@@ -39,6 +56,8 @@ interface ParsedManifest {
   summary?: unknown;
   tags?: unknown;
   compatibility?: unknown;
+  cardTheme?: unknown;
+  bundleCardTheme?: unknown;
 }
 
 interface ParsedFileIndexEntry {
@@ -48,6 +67,54 @@ interface ParsedFileIndexEntry {
 
 interface ParsedSafetyResults {
   riskFlags?: Array<{ flag?: unknown }>;
+}
+
+async function resolveBundleId(identifier: string): Promise<string | null> {
+  const raw = identifier.trim();
+  if (!raw) {
+    return null;
+  }
+
+  const direct = await db.select({ id: publisherBundle.id })
+    .from(publisherBundle)
+    .where(eq(publisherBundle.id, raw))
+    .limit(1);
+  if (direct[0]?.id) {
+    return direct[0].id;
+  }
+
+  const normalized = raw.toLowerCase();
+  const candidates = await db.select({
+    id: publisherBundle.id,
+    githubOwner: publisherBundle.githubOwner,
+    githubRepo: publisherBundle.githubRepo,
+    manifestJson: publisherBundle.manifestJson,
+  })
+    .from(publisherBundle);
+
+  for (const candidate of candidates) {
+    if (candidate.githubRepo.toLowerCase() === normalized) {
+      return candidate.id;
+    }
+
+    const fullName = `${candidate.githubOwner}/${candidate.githubRepo}`.toLowerCase();
+    if (fullName === normalized) {
+      return candidate.id;
+    }
+
+    if (candidate.manifestJson) {
+      try {
+        const manifest = JSON.parse(candidate.manifestJson) as ParsedManifest;
+        if (typeof manifest?.id === 'string' && manifest.id.trim().toLowerCase() === normalized) {
+          return candidate.id;
+        }
+      } catch {
+        // Ignore invalid manifest JSON during id resolution.
+      }
+    }
+  }
+
+  return null;
 }
 
 const ARTIFACT_TYPE_BY_KIND: Record<string, string> = {
@@ -63,6 +130,19 @@ const ARTIFACT_TYPE_BY_KIND: Record<string, string> = {
   prompt: 'prompts',
   script: 'scripts',
 };
+
+const FALLBACK_ACCENT_PALETTE = [
+  '#42A5F5',
+  '#66BB6A',
+  '#AB47BC',
+  '#FFA726',
+  '#26C6DA',
+  '#EC407A',
+  '#7E57C2',
+  '#29B6F6',
+  '#9CCC65',
+  '#FF7043',
+] as const;
 
 function parseJson<T>(raw: string | null | undefined): T | null {
   if (!raw) {
@@ -115,6 +195,133 @@ function toIsoTimestamp(value: Date | string | number | null | undefined): strin
   }
 
   return new Date(0).toISOString();
+}
+
+function getDeterministicAccent(seed: string): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash |= 0;
+  }
+
+  const index = Math.abs(hash) % FALLBACK_ACCENT_PALETTE.length;
+  return FALLBACK_ACCENT_PALETTE[index];
+}
+
+function normalizeHexColor(color: unknown): string | null {
+  if (typeof color !== 'string') {
+    return null;
+  }
+
+  const trimmed = color.trim();
+  const match = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(trimmed);
+  if (!match) {
+    return null;
+  }
+
+  const hex = match[1].toLowerCase();
+  if (hex.length === 3) {
+    return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+  }
+
+  return `#${hex}`;
+}
+
+function toBundleCardTheme(input: unknown): BundleCardTheme | null {
+  if (!input || typeof input !== 'object') {
+    return null;
+  }
+
+  const source = input as Record<string, unknown>;
+  const theme: BundleCardTheme = {
+    background: normalizeHexColor(source.background) ?? undefined,
+    backgroundHover: normalizeHexColor(source.backgroundHover) ?? undefined,
+    border: normalizeHexColor(source.border) ?? undefined,
+    borderHover: normalizeHexColor(source.borderHover) ?? undefined,
+    title: normalizeHexColor(source.title) ?? undefined,
+    text: normalizeHexColor(source.text) ?? undefined,
+    mutedText: normalizeHexColor(source.mutedText) ?? undefined,
+    chipBackground: normalizeHexColor(source.chipBackground) ?? undefined,
+    chipBorder: normalizeHexColor(source.chipBorder) ?? undefined,
+    chipText: normalizeHexColor(source.chipText) ?? undefined,
+  };
+
+  const hasAnyValue = Object.values(theme).some(Boolean);
+  return hasAnyValue ? theme : null;
+}
+
+function isThemePath(pathValue: unknown): pathValue is string {
+  if (typeof pathValue !== 'string') {
+    return false;
+  }
+
+  const normalized = pathValue.toLowerCase();
+  return /(^|\/)(\.opencode\/)?themes\//.test(normalized) && normalized.endsWith('.json');
+}
+
+function getCardThemeFromSnapshot(storagePath: string | null | undefined, fileIndex: ParsedFileIndexEntry[] | null): BundleCardTheme | null {
+  if (!storagePath || !fileIndex) {
+    return null;
+  }
+
+  // In serverless deployments we may store snapshots in remote object storage.
+  // This helper is intentionally best-effort and should never crash list endpoints.
+  if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
+    return null;
+  }
+
+  const themeEntry = fileIndex.find(
+    (entry): entry is ParsedFileIndexEntry & { path: string } => isThemePath(entry.path)
+  );
+  const themePath = themeEntry?.path;
+  if (!themePath) {
+    return null;
+  }
+
+  let content: string | null = null;
+  try {
+    content = extractFileFromZip(storagePath, themePath);
+  } catch {
+    return null;
+  }
+  if (!content) {
+    return null;
+  }
+
+  try {
+    const parsed = parseJsonc(content, undefined, true);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+
+    const themeObj = parsed as Record<string, unknown>;
+    const colors = themeObj.colors;
+    const colorMap = (colors && typeof colors === 'object') ? (colors as Record<string, unknown>) : null;
+
+    const background = normalizeHexColor(colorMap?.surface ?? colorMap?.background ?? themeObj.background);
+    const border = normalizeHexColor(colorMap?.border ?? colorMap?.outline ?? colorMap?.primary);
+    const title = normalizeHexColor(colorMap?.text ?? colorMap?.foreground ?? themeObj.text);
+    const text = normalizeHexColor(colorMap?.mutedText ?? colorMap?.muted ?? colorMap?.text ?? themeObj.text);
+    const chipBackground = normalizeHexColor(colorMap?.surface ?? colorMap?.background);
+    const chipBorder = normalizeHexColor(colorMap?.primary ?? colorMap?.border);
+    const chipText = normalizeHexColor(colorMap?.text ?? colorMap?.foreground);
+
+    const theme: BundleCardTheme = {
+      background: background ?? undefined,
+      border: border ?? undefined,
+      title: title ?? undefined,
+      text: text ?? undefined,
+      mutedText: text ?? undefined,
+      chipBackground: chipBackground ?? undefined,
+      chipBorder: chipBorder ?? undefined,
+      chipText: chipText ?? undefined,
+    };
+
+    const hasAnyValue = Object.values(theme).some(Boolean);
+    return hasAnyValue ? theme : null;
+  } catch {
+    return null;
+  }
 }
 
 function getManifestOpencodeCompatibility(manifest: ParsedManifest | null): string {
@@ -202,6 +409,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const bundles = await db.select({
         id: publisherBundle.id,
+        githubOwner: publisherBundle.githubOwner,
         githubRepo: publisherBundle.githubRepo,
         status: publisherBundle.status,
         manifestJson: publisherBundle.manifestJson,
@@ -220,6 +428,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
             createdAt: snapshot.createdAt,
             fileIndex: snapshot.fileIndex,
             safetyResults: snapshot.safetyResults,
+            storagePath: snapshot.storagePath,
           })
             .from(snapshot)
             .where(eq(snapshot.bundleId, bundle.id))
@@ -237,10 +446,17 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           const summary = typeof manifest?.summary === 'string' ? manifest.summary : '';
           const slug = typeof manifest?.id === 'string' ? manifest.id : bundle.githubRepo;
           const opencodeCompatibility = getManifestOpencodeCompatibility(manifest);
+          const manifestCardTheme = toBundleCardTheme(manifest?.cardTheme ?? manifest?.bundleCardTheme);
+          const snapshotCardTheme = getCardThemeFromSnapshot(latestSnapshot[0]?.storagePath, fileIndex);
+          const cardTheme = manifestCardTheme ?? snapshotCardTheme;
           const updatedAt = toIsoTimestamp(
             latestSnapshot[0]?.createdAt ?? bundle.updatedAt ?? bundle.createdAt
           );
           const updatedAtMs = new Date(updatedAt).getTime();
+
+          const resolvedAccentColor = cardTheme
+            ? (bundle.accentColor ?? cardTheme?.border ?? getDeterministicAccent(bundle.id))
+            : null;
 
           const card: BundleCardResponse & {
             _searchIndex: string;
@@ -251,10 +467,13 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
             slug,
             name,
             summary,
+            owner: bundle.githubOwner,
+            ownerAvatarUrl: `https://github.com/${bundle.githubOwner}.png`,
             tags,
             artifactTypes,
             riskBadges,
-            accentColor: bundle.accentColor,
+            accentColor: resolvedAccentColor,
+            cardTheme,
             stars: bundle.stars,
             forks: bundle.forks,
             updatedAt,
@@ -313,20 +532,30 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   // Get bundle detail
   fastify.get('/api/bundles/:id', async (request, reply) => {
     try {
-      const { id } = request.params as { id: string };
+      const { id: identifier } = request.params as { id: string };
+      const resolvedBundleId = await resolveBundleId(identifier);
+
+      if (!resolvedBundleId) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
 
       const bundle = await db.select({
         id: publisherBundle.id,
         githubFullName: publisherBundle.githubFullName,
         githubOwner: publisherBundle.githubOwner,
         githubRepo: publisherBundle.githubRepo,
+        accentColor: publisherBundle.accentColor,
+        stars: publisherBundle.stars,
+        forks: publisherBundle.forks,
         status: publisherBundle.status,
         createdAt: publisherBundle.createdAt,
+        updatedAt: publisherBundle.updatedAt,
         repoHtmlUrl: publisherBundle.repoHtmlUrl,
         manifestJson: publisherBundle.manifestJson,
       })
         .from(publisherBundle)
-        .where(eq(publisherBundle.id, id))
+        .where(eq(publisherBundle.id, resolvedBundleId))
         .limit(1);
 
       if (!bundle || bundle.length === 0) {
@@ -346,7 +575,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         safetyResults: snapshot.safetyResults,
       })
         .from(snapshot)
-        .where(eq(snapshot.bundleId, id))
+        .where(eq(snapshot.bundleId, resolvedBundleId))
         .orderBy(desc(snapshot.createdAt))
         .limit(1);
 
@@ -359,7 +588,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         errorMessage: importRun.errorMessage,
       })
         .from(importRun)
-        .where(eq(importRun.bundleId, id))
+        .where(eq(importRun.bundleId, resolvedBundleId))
         .orderBy(desc(importRun.finishedAt))
         .limit(1);
 
@@ -391,6 +620,10 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         // Invalid safety results JSON
       }
 
+      const manifestCardTheme = toBundleCardTheme(manifest?.cardTheme ?? manifest?.bundleCardTheme);
+      const snapshotCardTheme = getCardThemeFromSnapshot(latestSnapshot[0]?.storagePath, fileIndex);
+      const cardTheme = manifestCardTheme ?? snapshotCardTheme;
+
       return {
         id: bundleData.id,
         name: manifest?.name || bundleData.githubRepo,
@@ -401,14 +634,21 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         compatibility: manifest?.compatibility || {},
         repoUrl: bundleData.repoHtmlUrl,
         githubFullName: bundleData.githubFullName,
+        owner: bundleData.githubOwner,
+        ownerAvatarUrl: `https://github.com/${bundleData.githubOwner}.png`,
+        stars: bundleData.stars,
+        forks: bundleData.forks,
+        accentColor: bundleData.accentColor,
         status: bundleData.status,
         createdAt: bundleData.createdAt,
+        updatedAt: bundleData.updatedAt,
         latestSnapshot: latestSnapshot[0] ? {
           commitSha: latestSnapshot[0].commitSha,
           createdAt: latestSnapshot[0].createdAt,
           byteSize: latestSnapshot[0].byteSize,
         } : null,
         fileIndex: fileIndex || [],
+        cardTheme,
         safetyResults: safetyResults,
         lastImport: lastImport[0] ? {
           commitSha: lastImport[0].commitSha,
@@ -428,8 +668,14 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   // Get file content from bundle
   fastify.get('/api/bundles/:id/file', async (request, reply) => {
     try {
-      const { id } = request.params as { id: string };
+      const { id: identifier } = request.params as { id: string };
       const { path: filePath } = request.query as { path?: string };
+
+      const resolvedBundleId = await resolveBundleId(identifier);
+      if (!resolvedBundleId) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
 
       if (!filePath) {
         reply.code(400);
@@ -441,7 +687,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         id: publisherBundle.id,
       })
         .from(publisherBundle)
-        .where(eq(publisherBundle.id, id))
+        .where(eq(publisherBundle.id, resolvedBundleId))
         .limit(1);
 
       if (!bundle || bundle.length === 0) {
@@ -452,10 +698,11 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       // Get the latest snapshot for this bundle
       const latestSnapshot = await db.select({
         storagePath: snapshot.storagePath,
+        commitSha: snapshot.commitSha,
         fileIndex: snapshot.fileIndex,
       })
         .from(snapshot)
-        .where(eq(snapshot.bundleId, id))
+        .where(eq(snapshot.bundleId, resolvedBundleId))
         .orderBy(desc(snapshot.createdAt))
         .limit(1);
 
@@ -465,6 +712,12 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       const snapshotData = latestSnapshot[0];
+
+      const localSnapshotPath = await materializeSnapshotToLocal({
+        storagePath: snapshotData.storagePath,
+        bundleId: resolvedBundleId,
+        commitSha: snapshotData.commitSha,
+      });
 
       // Check if file exists in the file index
       let fileIndex = null;
@@ -495,7 +748,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       // Extract file content from zip
-      const content = extractFileFromZip(snapshotData.storagePath, filePath);
+      const content = extractFileFromZip(localSnapshotPath, filePath);
 
       if (content === null) {
         reply.code(404);
@@ -520,8 +773,14 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   // Download bundle as ZIP (project or global layout)
   fastify.get('/api/bundles/:id/download', async (request, reply) => {
     try {
-      const { id } = request.params as { id: string };
+      const { id: identifier } = request.params as { id: string };
       const { variant } = request.query as { variant?: string };
+
+      const resolvedBundleId = await resolveBundleId(identifier);
+      if (!resolvedBundleId) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
 
       // Validate variant parameter
       if (!variant) {
@@ -540,7 +799,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         githubRepo: publisherBundle.githubRepo,
       })
         .from(publisherBundle)
-        .where(eq(publisherBundle.id, id))
+        .where(eq(publisherBundle.id, resolvedBundleId))
         .limit(1);
 
       if (!bundle || bundle.length === 0) {
@@ -553,10 +812,11 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       // Get the latest snapshot for this bundle
       const latestSnapshot = await db.select({
         storagePath: snapshot.storagePath,
+        commitSha: snapshot.commitSha,
         safetyResults: snapshot.safetyResults,
       })
         .from(snapshot)
-        .where(eq(snapshot.bundleId, id))
+        .where(eq(snapshot.bundleId, resolvedBundleId))
         .orderBy(desc(snapshot.createdAt))
         .limit(1);
 
@@ -567,17 +827,15 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const snapshotData = latestSnapshot[0];
 
-      // Verify the snapshot file exists
-      try {
-        await fs.access(snapshotData.storagePath);
-      } catch {
-        reply.code(404);
-        return { error: 'Snapshot file not found' };
-      }
+      const localSnapshotPath = await materializeSnapshotToLocal({
+        storagePath: snapshotData.storagePath,
+        bundleId: resolvedBundleId,
+        commitSha: snapshotData.commitSha,
+      });
 
       // Generate the ZIP stream
       const { stream, filename } = generateZipStream(
-        snapshotData.storagePath,
+        localSnapshotPath,
         variant,
         bundleData.githubRepo
       );

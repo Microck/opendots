@@ -1,14 +1,9 @@
 .card {
-  background: var(--bg-card);
-  background-image: linear-gradient(
-    135deg,
-    rgba(var(--card-accent-rgb, 128 220 255), 0.08) 0%,
-    transparent 50%
-  );
-  border: 1px solid var(--border-light);
+  background: var(--card-bg-custom, var(--bg-card));
+  border: 1px solid var(--card-border-custom, var(--border-light));
   padding: var(--space-lg);
   padding-left: calc(var(--space-lg) + 4px);
-  transition: background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
+  transition: background-color 0.3s, border-color 0.3s;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -17,10 +12,10 @@
   border-radius: 0;
   cursor: pointer;
 }
+
 .card:hover {
-  border-color: var(--border-hover);
-  background: rgba(10, 37, 144, 0.5);
-  box-shadow: 0 0 20px rgba(var(--card-accent-rgb, 128 220 255), 0.15);
+  border-color: var(--card-border-hover-custom, var(--border-hover));
+  background: var(--card-bg-hover-custom, var(--card-bg-custom, var(--bg-card)));
 }
 
 .cardAccent {
@@ -34,13 +29,28 @@
   );
   opacity: 0.9;
 }
-.card:hover .cardAccent {
-  background: linear-gradient(
-    180deg,
-    var(--card-accent, var(--border-active)) 0%,
-    color-mix(in srgb, var(--card-accent, var(--border-active)) 60%, #000) 100%
-  );
-  box-shadow: 0 0 12px rgba(var(--card-accent-rgb, 128 220 255), 0.5);
+
+.creatorRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.creatorAvatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid rgba(var(--card-accent-rgb, 128 220 255), 0.45);
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.creatorHandle {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: var(--card-muted-custom, var(--text-dim));
 }
 
 .header {
@@ -52,10 +62,11 @@
 .name {
   font-size: 1rem;
   margin: 0;
+  color: var(--card-title-custom, var(--text-main));
 }
 
 .summary {
-  color: var(--text-muted);
+  color: var(--card-text-custom, var(--text-muted));
   font-size: 0.85rem;
   margin-bottom: var(--space-md);
   flex-grow: 1;
@@ -70,15 +81,16 @@
   align-items: center;
   justify-content: center;
   padding: 4px 10px;
-  border: 1px solid var(--border-light);
+  border: 1px solid var(--card-chip-border-custom, var(--border-light));
   border-radius: 0;
   font-size: 0.65rem;
   text-transform: uppercase;
-  font-weight: 600;
-  color: var(--text-muted);
+  font-weight: 400;
+  font-family: var(--font-accent);
+  color: var(--card-chip-text-custom, var(--text-muted));
   margin-right: 4px;
   margin-bottom: 4px;
-  background: rgba(0,0,0,0.2);
+  background: var(--card-chip-bg-custom, rgba(0,0,0,0.2));
 }
 
 .badgeRisk {
@@ -98,7 +110,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-top: 1px solid var(--border-light);
+  border-top: 1px solid var(--card-border-custom, var(--border-light));
   padding-top: 12px;
   gap: var(--space-sm);
 }
@@ -110,8 +122,11 @@
 }
 
 .metaItem {
-  font-family: var(--font-mono);
+  font-family: var(--font-accent);
   font-size: 0.7rem;
-  color: var(--text-dim);
+  color: var(--card-muted-custom, var(--text-dim));
   text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }

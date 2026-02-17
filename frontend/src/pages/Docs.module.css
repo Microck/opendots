@@ -1,7 +1,18 @@
 .page {
   padding-top: var(--space-2xl);
   padding-bottom: var(--space-2xl);
-  animation: fadeIn 0.3s ease;
+}
+
+.titleRule {
+  height: 1px;
+  background: var(--border-light);
+  margin-bottom: var(--space-xl);
+}
+
+.docsTitle {
+  font-family: var(--font-display);
+  font-weight: 400;
+  letter-spacing: 0.06em;
 }
 
 .article {
@@ -14,17 +25,21 @@
 }
 
 .sectionTitle {
+  font-family: var(--font-display);
   font-size: 1.25rem;
   margin-bottom: var(--space-md);
-  font-weight: 600;
+  font-weight: 400;
+  letter-spacing: 0.12em;
   color: var(--text-main);
 }
 
 .subsectionTitle {
+  font-family: var(--font-subhead);
   font-size: 1rem;
   margin-top: var(--space-lg);
   margin-bottom: var(--space-md);
-  font-weight: 600;
+  font-weight: 400;
+  letter-spacing: 0.1em;
   color: var(--text-main);
 }
 

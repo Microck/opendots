@@ -1,0 +1,5 @@
+Contact: security@opendots.me
+Acknowledgments: https://opendots.me/.well-known/security.txt
+Policy: https://opendots.me/PRIVACY.md
+Preferred-Languages: en
+Canonical: https://opendots.me/.well-known/security.txt

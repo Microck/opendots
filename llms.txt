@@ -1,0 +1,119 @@
+# OpenDots
+
+> A community portal for discovering, sharing, and verifying OpenCode configuration bundles.
+
+## Overview
+
+OpenDots is a full-stack web application with a React frontend and Fastify backend. Users can browse, publish, and download OpenCode configuration bundles.
+
+## Project Structure
+
+```
+/frontend          # React + Vite + TypeScript
+/backend           # Fastify + Drizzle ORM + SQLite
+```
+
+## Key Technologies
+
+- **Frontend**: React 19, Vite 7, Motion, GSAP
+- **Backend**: Fastify 5, Drizzle ORM, Better Auth
+- **Database**: SQLite (local) / Turso (production)
+- **Storage**: Local filesystem or Vercel Blob
+- **Deployment**: Vercel
+
+## Quick Start
+
+```bash
+# Install dependencies
+npm install -C frontend
+npm install -C backend
+
+# Start development
+npm run dev -C frontend  # localhost:5173
+npm run dev -C backend   # localhost:8788
+```
+
+## Important Files
+
+- `frontend/src/App.tsx` - Root component, routing, auth state
+- `frontend/src/pages/Home.tsx` - Landing page with hero and recent bundles
+- `frontend/src/pages/Browse.tsx` - Bundle discovery with filters
+- `backend/src/app.ts` - Fastify app setup with routes and headers
+- `backend/src/routes/publicBundles.ts` - Public API endpoints
+- `backend/src/routes/publisherBundles.ts` - Authenticated publisher endpoints
+- `backend/src/auth/auth.ts` - Better Auth configuration
+
+## Database Schema
+
+Tables: `user`, `session`, `account`, `verification`, `publisherBundle`, `snapshot`, `publishClaim`
+
+See `backend/src/db/schema/` for full definitions.
+
+## API Routes
+
+### Public
+- `GET /api/bundles` - List bundles with filters
+- `GET /api/bundles/:id` - Get bundle details
+- `GET /api/bundles/:id/download` - Download bundle ZIP
+
+### Authenticated
+- `POST /api/publish/claim/start` - Start claim process
+- `POST /api/publish/claim/complete` - Complete claim and register bundle
+- `GET /api/publisher/bundles` - List user's bundles
+
+### Auth (Better Auth)
+- `GET /api/auth/session` - Check session
+- All auth routes handled by Better Auth
+
+## Environment Variables
+
+### Frontend (.env)
+- `VITE_TURNSTILE_SITE_KEY` - Optional captcha
+- `VITE_API_BASE_URL` - Backend URL
+- `VITE_SITE_BASE_URL` - Public site URL
+
+### Backend (.env)
+- `BETTER_AUTH_SECRET` - Auth encryption key
+- `BETTER_AUTH_BASE_URL` - Backend URL
+- `APP_BASE_URL` - Frontend URL
+- `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` - GitHub OAuth
+- `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` - Database
+- `BLOB_READ_WRITE_TOKEN` - Optional Vercel Blob
+- `TURNSTILE_SECRET_KEY` - Optional captcha
+
+## Common Patterns
+
+### Adding a Page
+1. Create `frontend/src/pages/PageName.tsx`
+2. Add lazy import in `App.tsx`
+3. Add Route in Routes component
+4. Update sitemap.xml
+
+### Adding an API Route
+1. Create handler in `backend/src/routes/`
+2. Register in `backend/src/app.ts`
+3. Add to fetchBundles params if needed
+
+### Database Migration
+1. Update schema in `backend/src/db/schema/`
+2. `npm run db:generate -C backend`
+3. `npm run db:migrate -C backend`
+
+## Security Headers
+
+Configured in `vercel.json`:
+- CSP, HSTS, X-Frame-Options
+- X-Content-Type-Options, Referrer-Policy
+- Permissions-Policy
+
+## Bundle Publishing Flow
+
+1. User enters repo on homepage
+2. Backend generates claim code
+3. User commits claim file to repo
+4. Backend verifies and registers bundle
+5. Bundle appears in browse
+
+## Contact
+
+contact@micr.dev

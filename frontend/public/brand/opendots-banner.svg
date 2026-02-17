@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="360" viewBox="0 0 1200 360" role="img" aria-label="Opendots banner">
+  <defs>
+    <linearGradient id="od-banner-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b0f18" />
+      <stop offset="100%" stop-color="#1a2433" />
+    </linearGradient>
+    <linearGradient id="od-banner-glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#80DCFF" stop-opacity="0.2" />
+      <stop offset="100%" stop-color="#80DCFF" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="360" fill="url(#od-banner-bg)" />
+  <rect x="120" y="70" width="960" height="220" rx="28" fill="url(#od-banner-glow)" />
+  <circle cx="210" cy="180" r="54" fill="#80DCFF" />
+  <circle cx="210" cy="180" r="24" fill="#0b0f18" />
+  <text x="300" y="165" font-family="Space Grotesk, Arial, sans-serif" font-size="54" fill="#ffffff" letter-spacing="2">
+    OPENDOTS
+  </text>
+  <text x="300" y="220" font-family="Space Grotesk, Arial, sans-serif" font-size="22" fill="#b7c4d9" letter-spacing="1">
+    OpenCode bundles for power users
+  </text>
+</svg>

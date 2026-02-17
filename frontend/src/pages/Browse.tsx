@@ -5,10 +5,17 @@ import { fetchBundles, type BrowseSort } from '../api/bundles'
 import BundleCard, { type BundleCardData } from '../components/BundleCard'
 import useDebouncedValue from '../hooks/useDebouncedValue'
 import { useReducedMotion } from '../hooks/useReducedMotion'
-import { staggerGrid, staggerItem, scrollViewports } from '../styles/animations'
+import useReactiveSurfaceVars from '../hooks/useReactiveSurfaceVars'
+import {
+  fadeInDown,
+  staggerGrid,
+  staggerItemBlur,
+  sectionReveal,
+  drawLine,
+  scrollViewports,
+} from '../styles/animations'
 import styles from './Browse.module.css'
-
-const DEFAULT_TAG_OPTIONS = ['minimal', 'theme', 'productivity', 'terminal', 'workflow', 'ai']
+import ClickSpark from '../reactbits/ClickSpark'
 
 const ARTIFACT_TYPE_OPTIONS = [
   'themes',
@@ -53,35 +60,43 @@ export default function Browse() {
   const [error, setError] = useState<string | null>(null)
   const [searchInput, setSearchInput] = useState(searchParams.get('q') ?? '')
   const prefersReducedMotion = useReducedMotion()
+  const mastheadRef = useReactiveSurfaceVars<HTMLDivElement>(!prefersReducedMotion, {
+    shiftX: 18,
+    shiftY: 12,
+    spotRange: 14,
+    basePulseOpacity: 0.18,
+    energyPulseOpacity: 0.22,
+    energyScale: 0.12,
+    maxEnergy: 1.4,
+  })
 
   const qFromUrl = searchParams.get('q') ?? ''
-  const selectedTags = normalizeValues(searchParams.getAll('tag'))
-  const selectedArtifactTypes = normalizeValues(searchParams.getAll('type'))
-  const opencode = searchParams.get('opencode') ?? ''
+  const selectedArtifactTypes = useMemo(
+    () => normalizeValues(searchParams.getAll('type')),
+    [searchParams],
+  )
   const sort: BrowseSort = searchParams.get('sort') === 'newest' ? 'newest' : 'newest'
 
   const debouncedSearch = useDebouncedValue(searchInput, SEARCH_DEBOUNCE_DELAY_MS)
 
-  const tagOptions = useMemo(
-    () => Array.from(new Set([...DEFAULT_TAG_OPTIONS, ...selectedTags])).sort(),
-    [selectedTags],
-  )
-  const selectedTagSet = useMemo(() => new Set(selectedTags), [selectedTags])
   const selectedArtifactTypeSet = useMemo(() => new Set(selectedArtifactTypes), [selectedArtifactTypes])
 
-  const selectedTagsKey = selectedTags.join('|')
   const selectedArtifactTypesKey = selectedArtifactTypes.join('|')
-  const activeFilterCount = selectedTags.length + selectedArtifactTypes.length + (opencode ? 1 : 0)
+  const activeFilterCount = (qFromUrl.trim().length > 0 ? 1 : 0) + selectedArtifactTypes.length
 
   const statusText = `INDEX STATUS: ONLINE | BUNDLES: ${bundles.length} | FILTERS: ${activeFilterCount}`
 
   useEffect(() => {
-    if (searchParams.get('sort')) {
-      return
-    }
-
     setSearchParams((previousParams) => {
       const nextParams = new URLSearchParams(previousParams)
+
+      // Tags + version filtering were removed from Browse.
+      nextParams.delete('tag')
+      nextParams.delete('opencode')
+
+      if (nextParams.get('sort')) {
+        return nextParams
+      }
       nextParams.set('sort', 'newest')
       return nextParams
     }, { replace: true })
@@ -123,9 +138,7 @@ export default function Browse() {
         const data = await fetchBundles(
           {
             q: qFromUrl,
-            tags: selectedTags,
             artifactTypes: selectedArtifactTypes,
-            opencode,
             sort,
           },
           abortController.signal,
@@ -151,37 +164,13 @@ export default function Browse() {
     return () => {
       abortController.abort()
     }
-  }, [qFromUrl, selectedTagsKey, selectedArtifactTypesKey, opencode, sort])
-
-  const handleToggleTag = (tag: string) => {
-    setSearchParams((previousParams) => {
-      const nextParams = new URLSearchParams(previousParams)
-      const nextTags = toggleValue(normalizeValues(previousParams.getAll('tag')), tag)
-      updateListParam(nextParams, 'tag', nextTags)
-      return nextParams
-    })
-  }
+  }, [qFromUrl, selectedArtifactTypes, sort, selectedArtifactTypesKey, setSearchParams])
 
   const handleToggleArtifactType = (artifactType: string) => {
     setSearchParams((previousParams) => {
       const nextParams = new URLSearchParams(previousParams)
       const nextTypes = toggleValue(normalizeValues(previousParams.getAll('type')), artifactType)
       updateListParam(nextParams, 'type', nextTypes)
-      return nextParams
-    })
-  }
-
-  const handleOpencodeChange = (value: string) => {
-    setSearchParams((previousParams) => {
-      const nextParams = new URLSearchParams(previousParams)
-      const nextValue = value.trim()
-
-      if (nextValue.length > 0) {
-        nextParams.set('opencode', nextValue)
-      } else {
-        nextParams.delete('opencode')
-      }
-
       return nextParams
     })
   }
@@ -200,50 +189,65 @@ export default function Browse() {
     setSearchParams((previousParams) => {
       const nextParams = new URLSearchParams(previousParams)
       nextParams.delete('q')
-      nextParams.delete('tag')
       nextParams.delete('type')
-      nextParams.delete('opencode')
       nextParams.set('sort', 'newest')
       return nextParams
     })
   }
 
+  // Helper: returns variants only when motion is allowed
+  const v = (variants: import('motion/react').Variants) =>
+    prefersReducedMotion ? undefined : variants
+
   return (
     <div className={styles.page}>
       <div className="container">
-        <div className={styles.headerRow}>
-          <h2 style={{ marginBottom: 0 }}>BROWSE BUNDLES</h2>
-          <span className={styles.statusText}>{statusText}</span>
-        </div>
+        <section className={styles.masthead} ref={mastheadRef}>
+          <div className={styles.mastheadBlueprint} aria-hidden />
 
-        <section className={styles.controlsPanel}>
+          {/* Header with line draw */}
+          <motion.div
+            className={styles.headerRow}
+            variants={v(fadeInDown)}
+            initial="hidden"
+            animate="visible"
+          >
+            <h2 style={{ marginBottom: 0 }}>BROWSE BUNDLES</h2>
+            <span className={styles.statusText}>{statusText}</span>
+          </motion.div>
+
+          <motion.div
+            className={styles.headerRule}
+            variants={v(drawLine)}
+            initial="hidden"
+            animate="visible"
+            style={{ transformOrigin: 'left center' }}
+          />
+        </section>
+
+        {/* Controls panel with blur-in */}
+        <motion.section
+          className={styles.controlsPanel}
+          variants={v(sectionReveal)}
+          initial="hidden"
+          animate="visible"
+          transition={{ delay: 0.15 }}
+        >
           <div className={styles.controlGroup}>
-            <label htmlFor="bundle-search" className={styles.controlLabel}>TEXT SEARCH</label>
+            <label htmlFor="bundle-search" className={styles.controlLabel} data-gsap="text">TEXT SEARCH</label>
             <input
               id="bundle-search"
               className={styles.controlInput}
               type="search"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
-              placeholder="name, summary, or tag"
+              placeholder="name or summary"
             />
           </div>
 
           <div className={styles.controlRow}>
             <div className={styles.controlGroup}>
-              <label htmlFor="opencode-filter" className={styles.controlLabel}>OPENCODE COMPAT</label>
-              <input
-                id="opencode-filter"
-                className={styles.controlInput}
-                type="text"
-                value={opencode}
-                onChange={(event) => handleOpencodeChange(event.target.value)}
-                placeholder="e.g. 1.0 or >=1.0"
-              />
-            </div>
-
-            <div className={styles.controlGroup}>
-              <label htmlFor="sort-filter" className={styles.controlLabel}>SORT</label>
+              <label htmlFor="sort-filter" className={styles.controlLabel} data-gsap="text">SORT</label>
               <select
                 id="sort-filter"
                 className={styles.controlSelect}
@@ -255,36 +259,21 @@ export default function Browse() {
             </div>
 
             <div className={styles.controlActions}>
-              <button
-                type="button"
-                className={styles.clearButton}
-                onClick={handleClearFilters}
-              >
-                Clear all filters
-              </button>
+              <ClickSpark sparkColor="rgba(255,255,255,0.9)" sparkSize={8} sparkRadius={10}>
+                <button
+                  type="button"
+                  className={styles.clearButton}
+                  onClick={handleClearFilters}
+                >
+                  Clear all filters
+                </button>
+              </ClickSpark>
             </div>
           </div>
 
           <div className={styles.filterGrid}>
             <fieldset className={styles.filterGroup}>
-              <legend className={styles.controlLabel}>TAGS</legend>
-              <div className={styles.optionGrid}>
-                {tagOptions.map((tag) => (
-                  <label key={tag} className={styles.checkboxLabel}>
-                    <input
-                      type="checkbox"
-                      className={styles.checkboxInput}
-                      checked={selectedTagSet.has(tag)}
-                      onChange={() => handleToggleTag(tag)}
-                    />
-                    <span>{tag}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-
-            <fieldset className={styles.filterGroup}>
-              <legend className={styles.controlLabel}>ARTIFACT TYPES</legend>
+              <legend className={styles.controlLabel} data-gsap="text">ARTIFACT TYPES</legend>
               <div className={styles.optionGrid}>
                 {ARTIFACT_TYPE_OPTIONS.map((artifactType) => (
                   <label key={artifactType} className={styles.checkboxLabel}>
@@ -300,24 +289,43 @@ export default function Browse() {
               </div>
             </fieldset>
           </div>
-        </section>
+        </motion.section>
 
         {loading && (
-          <div className={styles.statePanel}>Loading bundles...</div>
+          <motion.div
+            className={styles.statePanel}
+            initial={prefersReducedMotion ? undefined : { opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            Loading bundles...
+          </motion.div>
         )}
 
         {!loading && error && (
-          <div className={styles.statePanel}>Error: {error}</div>
+          <motion.div
+            className={styles.statePanel}
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            Error: {error}
+          </motion.div>
         )}
 
         {!loading && !error && bundles.length === 0 && (
-          <div className={styles.statePanel}>No bundles found for the current query.</div>
+          <motion.div
+            className={styles.statePanel}
+            initial={prefersReducedMotion ? undefined : { opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+          >
+            No bundles found for the current query.
+          </motion.div>
         )}
 
         {!loading && !error && bundles.length > 0 && (
           <motion.div
             className={styles.bundleGrid}
-            variants={prefersReducedMotion ? undefined : staggerGrid}
+            variants={v(staggerGrid)}
             initial="hidden"
             whileInView="visible"
             viewport={scrollViewports.once}
@@ -325,7 +333,7 @@ export default function Browse() {
             {bundles.map((bundle) => (
               <motion.div
                 key={bundle.id}
-                variants={prefersReducedMotion ? undefined : staggerItem}
+                variants={v(staggerItemBlur)}
               >
                 <BundleCard bundle={bundle} />
               </motion.div>

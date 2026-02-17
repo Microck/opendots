@@ -22,6 +22,20 @@
       "when": 1771019196118,
       "tag": "0002_flat_squadron_supreme",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1771450000000,
+      "tag": "0003_publish_claim_flow",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1771500000000,
+      "tag": "0004_unique_bundle_repo",
+      "breakpoints": true
     }
   ]
 }

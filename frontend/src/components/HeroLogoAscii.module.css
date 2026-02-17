@@ -1,0 +1,18 @@
+.wrap {
+  width: min(760px, 92%);
+  aspect-ratio: 1;
+  position: relative;
+  z-index: 2;
+}
+
+.canvas {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+
+@media (max-width: 700px) {
+  .wrap {
+    width: min(560px, 96%);
+  }
+}

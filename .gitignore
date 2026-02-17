@@ -1,1 +1,28 @@
 .planning/
+
+# Dependencies
+**/node_modules/
+
+# Build output
+**/dist/
+**/.turbo/
+**/.vite/
+
+# Local env
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local databases / state
+**/*.db
+backend/storage/
+
+# Logs / temporary artifacts
+*.log
+mcp-server*.log
+session-*.md
+deep-research-report*.md
+
+# OS / editor
+.DS_Store
+Thumbs.db

@@ -48,14 +48,15 @@ export async function fetchAndValidateManifest(
   owner: string,
   repo: string
 ): Promise<OpendotsManifest | ManifestValidationError> {
-  const yamlContent = await getFileContent(owner, repo, 'opendots.yml');
+  const yamlContent = await getFileContent(owner, repo, 'opendots.yml')
+    ?? await getFileContent(owner, repo, 'opendots.yaml');
 
   if (yamlContent === null) {
     const jsonContent = await getFileContent(owner, repo, 'opendots.json');
     if (jsonContent === null) {
       return {
         field: 'manifest',
-        message: 'opendots.yml or opendots.json not found in repository root',
+        message: 'opendots.yml, opendots.yaml, or opendots.json not found in repository root',
       };
     }
     try {

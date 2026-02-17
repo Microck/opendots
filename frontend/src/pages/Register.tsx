@@ -1,6 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ArrowLeft } from '@phosphor-icons/react'
+import { motion } from 'motion/react'
+import { Check, ArrowLeft, CopySimple } from '@phosphor-icons/react'
+import { useReducedMotion } from '../hooks/useReducedMotion'
+import { apiUrl } from '../lib/apiBase'
+import { siteUrl } from '../lib/siteBase'
+import {
+  fadeInUp,
+  fadeInLeft,
+  scaleInBlur,
+  staggerContainer,
+  staggerItem,
+  sectionReveal,
+} from '../styles/animations'
 import styles from './Register.module.css'
 
 export default function Register() {
@@ -9,6 +21,12 @@ export default function Register() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
+  const [publishPromptCopied, setPublishPromptCopied] = useState(false)
+  const prefersReducedMotion = useReducedMotion()
+  const publishPrompt = `Fetch and follow ${siteUrl('/PUBLISH.md')}`
+
+  const v = (variants: import('motion/react').Variants) =>
+    prefersReducedMotion ? undefined : variants
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -17,7 +35,7 @@ export default function Register() {
     setSuccess(false)
 
     try {
-      const response = await fetch('/api/publisher/bundles', {
+      const response = await fetch(apiUrl('/api/publisher/bundles'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -42,10 +60,20 @@ export default function Register() {
           navigate('/dashboard')
         }, 2000)
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleCopyPublishPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(publishPrompt)
+      setPublishPromptCopied(true)
+      window.setTimeout(() => setPublishPromptCopied(false), 1800)
+    } catch {
+      setError('Could not copy prompt. Copy it manually from the text box.')
     }
   }
 
@@ -53,14 +81,19 @@ export default function Register() {
     return (
       <div className={styles.page}>
         <div className="container">
-          <div className={styles.formContainer}>
+          <motion.div
+            className={styles.formContainer}
+            variants={v(scaleInBlur)}
+            initial="hidden"
+            animate="visible"
+          >
             <div className={styles.successMessage}>
               <Check size={24} weight="bold" aria-label="Success" /> Repository registered successfully!
             </div>
             <p style={{ textAlign: 'center', marginTop: '16px' }}>
               Redirecting to dashboard...
             </p>
-          </div>
+          </motion.div>
         </div>
       </div>
     )
@@ -69,50 +102,99 @@ export default function Register() {
   return (
     <div className={styles.page}>
       <div className="container">
-        <a onClick={() => navigate('/dashboard')} className={styles.backLink}>
+        <motion.a
+          onClick={() => navigate('/dashboard')}
+          className={styles.backLink}
+          variants={v(fadeInLeft)}
+          initial="hidden"
+          animate="visible"
+        >
           <ArrowLeft size={16} weight="bold" aria-label="Back" /> BACK TO DASHBOARD
-        </a>
-        <div className={styles.formContainer}>
-          <h2 style={{ marginBottom: 'var(--space-lg)' }}>REGISTER REPOSITORY</h2>
+        </motion.a>
 
-          <form onSubmit={handleSubmit}>
-            <div className={styles.formGroup}>
-              <label className="text-label">GITHUB REPOSITORY</label>
-              <input
-                type="text"
-                className={styles.inputText}
-                placeholder="e.g. user/my-opencode-config"
-                value={repo}
-                onChange={(e) => setRepo(e.target.value)}
-                disabled={isLoading}
-              />
-              <p className={styles.hint}>
-                Must be a public GitHub repository owned by you.
+        <motion.div
+          className={styles.formContainer}
+          variants={v(scaleInBlur)}
+          initial="hidden"
+          animate="visible"
+        >
+          <motion.div variants={v(staggerContainer)} initial="hidden" animate="visible">
+            <motion.h2
+              style={{ marginBottom: 'var(--space-lg)' }}
+              variants={v(staggerItem)}
+            >
+              REGISTER REPOSITORY
+            </motion.h2>
+
+            <motion.div className={styles.aiRecommended} variants={v(staggerItem)}>
+              <p className={styles.aiLabel}>RECOMMENDED: AI-FIRST PUBLISH FLOW</p>
+              <p className={styles.aiText}>
+                Ask your coding agent to run the official publishing protocol. It includes a
+                secrets audit, manifest generation, and GitHub publishing workflow.
               </p>
-            </div>
+              <pre className={styles.aiPrompt}>{publishPrompt}</pre>
+              <button
+                type="button"
+                className={styles.copyButton}
+                onClick={() => void handleCopyPublishPrompt()}
+              >
+                <CopySimple size={14} weight="bold" />
+                {publishPromptCopied ? 'COPIED' : 'COPY PROMPT'}
+              </button>
+            </motion.div>
 
-            {error && (
-              <div className={styles.errorMessage}>
-                {error}
-              </div>
-            )}
+            <form onSubmit={handleSubmit}>
+              <motion.div className={styles.formGroup} variants={v(staggerItem)}>
+                <label className="text-label">GITHUB REPOSITORY</label>
+                <p className={styles.manualFallback}>Manual fallback</p>
+                <input
+                  type="text"
+                  className={styles.inputText}
+                  placeholder="e.g. user/my-opencode-config"
+                  value={repo}
+                  onChange={(e) => setRepo(e.target.value)}
+                  disabled={isLoading}
+                />
+                <p className={styles.hint}>
+                  Must be a public GitHub repository owned by you.
+                </p>
+              </motion.div>
 
-            <div className={styles.requirements}>
-              <span className="text-label" style={{ display: 'block', marginBottom: '8px' }}>
-                VALIDATION REQUIREMENTS
-              </span>
-              <ul className={styles.requirementList}>
-                <li>Repo public access</li>
-                <li><code>opencode.json</code> or <code>opendots.yml</code> at root (recommended)</li>
-                <li>Valid JSON/YAML syntax in config files</li>
-              </ul>
-            </div>
+              {error && (
+                <motion.div
+                  className={styles.errorMessage}
+                  initial={prefersReducedMotion ? undefined : { opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {error}
+                </motion.div>
+              )}
 
-            <button type="submit" className={styles.btnPrimary} disabled={isLoading || !repo.trim()}>
-              {isLoading ? 'VALIDATING...' : 'VALIDATE & REGISTER'}
-            </button>
-          </form>
-        </div>
+              <motion.div className={styles.requirements} variants={v(sectionReveal)}>
+                <span className="text-label" style={{ display: 'block', marginBottom: '8px' }}>
+                  VALIDATION REQUIREMENTS
+                </span>
+                <ul className={styles.requirementList}>
+                  <li>Repo public access</li>
+                  <li><code>opencode.json</code> or <code>opendots.yml</code> at root (recommended)</li>
+                  <li>Valid JSON/YAML syntax in config files</li>
+                </ul>
+              </motion.div>
+
+              <motion.button
+                type="submit"
+                className={styles.btnPrimary}
+                disabled={isLoading || !repo.trim()}
+                variants={v(fadeInUp)}
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.02 }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.97 }}
+              >
+                {isLoading ? 'VALIDATING...' : 'VALIDATE & REGISTER'}
+              </motion.button>
+            </form>
+          </motion.div>
+        </motion.div>
       </div>
     </div>
   )

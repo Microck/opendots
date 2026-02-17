@@ -5,10 +5,12 @@ export function createGitHubClient(accessToken: string) {
     auth: accessToken,
     throttle: {
       onRateLimit: (retryAfter: number, options: any) => {
-        console.warn(`Rate limited. Retrying after ${retryAfter} seconds`);
+        console.warn(`GitHub rate limit hit for ${options.method} ${options.url}. Retry after ${retryAfter}s`);
+        return true;
       },
-      onAbuseLimit: (retryAfter: number, options: any) => {
-        console.warn(`Abuse detected. Retrying after ${retryAfter} seconds`);
+      onSecondaryRateLimit: (retryAfter: number, options: any) => {
+        console.warn(`GitHub secondary rate limit hit for ${options.method} ${options.url}. Retry after ${retryAfter}s`);
+        return true;
       },
     },
   });
@@ -18,6 +20,7 @@ export interface GitHubRepoInfo {
   id: number;
   name: string;
   full_name: string;
+  private: boolean;
   owner: {
     login: string;
   };
@@ -36,6 +39,11 @@ export interface GitHubRepoInfo {
   };
 }
 
+export interface GitHubAuthenticatedUser {
+  id: number;
+  login: string;
+}
+
 export async function getRepoInfo(
   octokit: Octokit,
   owner: string,
@@ -51,6 +59,7 @@ export async function getRepoInfo(
       id: response.data.id,
       name: response.data.name,
       full_name: response.data.full_name,
+      private: response.data.private,
       owner: {
         login: response.data.owner.login,
       },
@@ -98,4 +107,15 @@ export async function getFileContent(
     }
     throw error;
   }
+}
+
+export async function getAuthenticatedUser(
+  octokit: Octokit
+): Promise<GitHubAuthenticatedUser> {
+  const response = await octokit.rest.users.getAuthenticated();
+
+  return {
+    id: response.data.id,
+    login: response.data.login,
+  };
 }

@@ -1,32 +1,6 @@
-import Fastify from 'fastify';
-import { fastifyAuthRoute } from './auth/fastifyAuthRoute';
-import { healthRoute } from './routes/health';
-import { sessionRoute } from './routes/session';
-import { publisherBundlesRoute } from './routes/publisherBundles';
-import { publicBundlesRoute } from './routes/publicBundles';
+import { buildServer } from './app';
 
-const PORT = Number(process.env.PORT) || 8787;
-
-async function buildServer() {
-  const server = Fastify({
-    logger: true,
-  });
-
-  await server.register(fastifyAuthRoute);
-  await server.register(healthRoute);
-  await server.register(sessionRoute);
-  await server.register(publisherBundlesRoute);
-  await server.register(publicBundlesRoute);
-
-  server.addHook('onRequest', async (request, reply) => {
-    reply.header('Access-Control-Allow-Origin', request.headers.origin || '*');
-    reply.header('Access-Control-Allow-Credentials', 'true');
-    reply.header('Access-Control-Allow-Methods', 'GET,OPTIONS,POST,PUT,DELETE');
-    reply.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
-  });
-
-  return server;
-}
+const PORT = Number(process.env.PORT) || 8788;
 
 async function start() {
   const server = await buildServer();

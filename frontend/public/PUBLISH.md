@@ -434,6 +434,25 @@ def sanitize_args(args):
     '-t', '-k', '-p', '-u',
   }
 
+  secret_flags_eq = {
+    '--token', '--auth-token', '--secret', '--password', '--pass', '--passwd', '--pwd',
+    '--api-key', '--apikey', '--key',
+    '--user', '--username', '--login', '--email', '--host', '--hostname', '--ip', '--address', '--url', '--endpoint', '--base-url',
+  }
+
+  def redact_flag_value(flag: str, value: str) -> str:
+    # Keep flag name, redact the value.
+    if flag in {'--key'}:
+      return f"{flag}=<REDACTED_PATH>"
+    if flag in {'--host', '--hostname', '--ip', '--address', '--url', '--endpoint', '--base-url'}:
+      return f"{flag}=<REDACTED>"
+    if flag in {'--user', '--username', '--login', '--email'}:
+      return f"{flag}=<REDACTED>"
+    if flag in {'--token', '--auth-token', '--secret', '--password', '--pass', '--passwd', '--pwd', '--api-key', '--apikey'}:
+      return f"{flag}=<REDACTED>"
+    # fallback
+    return f"{flag}=<REDACTED>"
+
   out = []
   skip_next = False
   for i, item in enumerate(args):
@@ -442,6 +461,13 @@ def sanitize_args(args):
       continue
     if not isinstance(item, str):
       continue
+
+    # Handle --flag=value style arguments
+    if item.startswith('--') and '=' in item:
+      flag, value = item.split('=', 1)
+      if flag in secret_flags_eq:
+        out.append(redact_flag_value(flag, value))
+        continue
 
     if item in secret_flags:
       skip_next = True
@@ -482,6 +508,13 @@ def sanitize(obj):
       if k == 'args':
         out[k] = sanitize_args(v)
         continue
+
+      # Some OpenCode MCP configs store argv under `command` (array), which can include
+      # `--password=...`, `--token=...`, `--key=...`, etc. Sanitize it like args.
+      if k == 'command' and isinstance(v, list):
+        out[k] = sanitize_args(v)
+        continue
+
       out[k] = sanitize(v)
     return out
   if isinstance(obj, list):
@@ -597,19 +630,25 @@ STAGE = Path(os.environ.get('STAGE_DIR', '/tmp/opendots-stage')).resolve()
 EXCLUDE_DIRS = {'.git','node_modules','__pycache__','.ruff_cache'}
 EXCLUDE_SUFFIXES = ('.log', '.pem', '.key', '.p12', '.pfx')
 
-# High-confidence patterns only (fail closed)
-PATTERNS = [
+BLOCK_PATTERNS = [
   ('github_token', re.compile(r'\b(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b')),
   ('gitlab_token', re.compile(r'\bglpat-[A-Za-z0-9\-]{20}\b')),
   ('slack_token', re.compile(r'\bxox[baprs]-[A-Za-z0-9\-]{20,}\b')),
   ('stripe_secret', re.compile(r'\bsk_(?:test|live)_[A-Za-z0-9]{24,}\b')),
   ('vercel_blob_token', re.compile(r'\bvercel_blob_rw_[A-Za-z0-9_\-]{10,}\b')),
-  ('known_secret_key_name', re.compile(r'(?i)\b(DISCORD_TOKEN|KAGI_TOKEN|N8N_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GOOGLE_API_KEY|SLACK_BOT_TOKEN|UPSTASH_REDIS_REST_TOKEN|TURSO_AUTH_TOKEN|BLOB_READ_WRITE_TOKEN)\b')),
   ('aws_access_key', re.compile(r'\b(AKIA|ASIA)[0-9A-Z]{16}\b')),
   ('private_key_block', re.compile(r'-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----')),
   ('jwt_like', re.compile(r'\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b')),
   ('conn_string_pw', re.compile(r'(?:mongodb|postgres|mysql|redis):\\/\\/[^:\s]+:[^@\s]+@', re.I)),
-  ('key_assignment_secret', re.compile(r'(?i)\b(token|secret|password|pass|passwd|pwd|api[_-]?key|auth[_-]?token)\b\s*[:=]\s*["\x27][^"\x27]{6,}["\x27]')),
+  # CLI-style secrets: block only if it looks like a real value (long + not a placeholder).
+  ('cli_password_arg', re.compile(r'--password=(?!<REDACTED>)(?!<[^>]+>)(?!\$\{?[A-Z0-9_]+\}?)(?!YOUR_|REPLACE_|CHANGEME|CHANGE_ME|TBD|EXAMPLE)[^\s]{8,}', re.I)),
+  ('cli_token_arg', re.compile(r'--(?:token|auth-token|api-key|apikey|secret)=(?!<REDACTED>)(?!<[^>]+>)(?!\$\{?[A-Z0-9_]+\}?)(?!YOUR_|REPLACE_|CHANGEME|CHANGE_ME|TBD|EXAMPLE)[^\s]{16,}', re.I)),
+]
+
+# Warning patterns (do NOT block publish by themselves). These match lots of docs/templates.
+WARN_PATTERNS = [
+  ('known_secret_key_name', re.compile(r'(?i)\b(DISCORD_TOKEN|KAGI_TOKEN|N8N_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GOOGLE_API_KEY|SLACK_BOT_TOKEN|UPSTASH_REDIS_REST_TOKEN|TURSO_AUTH_TOKEN|BLOB_READ_WRITE_TOKEN)\b')),
+  ('key_assignment_like', re.compile(r'(?i)\b(token|secret|password|pass|passwd|pwd|api[_-]?key|auth[_-]?token)\b\s*[:=]\s*["\x27][^"\x27]{6,}["\x27]')),
   ('ipv4_address', re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')),
 ]
 
@@ -627,7 +666,12 @@ def excluded_path(p: Path) -> bool:
   return False
 
 files_scanned = 0
-matches = []
+block_matches = []
+warn_matches = []
+
+def is_docs_or_template_file(p: Path) -> bool:
+  lower = str(p).lower()
+  return p.suffix.lower() in {'.md', '.mdx'} or '/references/' in lower or '/assets/' in lower or '/templates/' in lower
 
 for root, dirs, files in os.walk(STAGE):
   dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
@@ -644,23 +688,44 @@ for root, dirs, files in os.walk(STAGE):
       continue
     files_scanned += 1
     for i, line in enumerate(lines, start=1):
-      for label, rx in PATTERNS:
+      for label, rx in BLOCK_PATTERNS:
         if rx.search(line):
-          matches.append((p, i, label))
+          # Avoid blocking on docs/templates for patterns that are commonly shown as examples.
+          # Still block for real token formats (ghp_, jwt, etc.) regardless of file type.
+          if is_docs_or_template_file(p) and label in {'cli_password_arg', 'cli_token_arg', 'private_key_block'}:
+            warn_matches.append((p, i, f"{label}_in_docs"))
+          else:
+            block_matches.append((p, i, label))
+      for label, rx in WARN_PATTERNS:
+        if rx.search(line):
+          warn_matches.append((p, i, label))
 
 print(f"FILES_SCANNED\t{files_scanned}")
-for p, i, label in matches:
+for p, i, label in block_matches:
   rel = p.relative_to(STAGE)
-  print(f"MATCH\t{rel}:{i}\t{label}")
-print(f"MATCH_COUNT\t{len(matches)}")
+  print(f"BLOCK\t{rel}:{i}\t{label}")
+print(f"BLOCK_MATCH_COUNT\t{len(block_matches)}")
+
+for p, i, label in warn_matches[:200]:
+  rel = p.relative_to(STAGE)
+  print(f"WARN\t{rel}:{i}\t{label}")
+print(f"WARN_MATCH_COUNT\t{len(warn_matches)}")
 
 out = Path('/tmp/opendots-secret-matches.txt')
-out.write_text(''.join([str(p.relative_to(STAGE)) + "\n" for (p,_,_) in matches]), encoding='utf-8')
+out.write_text(''.join([str(p.relative_to(STAGE)) + "\n" for (p,_,_) in block_matches]), encoding='utf-8')
 PY
 ```
 
-If `MATCH_COUNT` is not `0`, sanitize by excluding the matched files from the staged bundle (default).
+If `BLOCK_MATCH_COUNT` is not `0`, sanitize by excluding the matched files from the staged bundle (default).
 Do NOT try to rewrite large documentation sets to remove example tokens.
+
+If `BLOCK_MATCH_COUNT` is `0` but `WARN_MATCH_COUNT` is non-zero:
+
+- These warnings are often false positives from docs/templates.
+- Ask the human:
+  - "Are these warnings just examples/documentation?" (Usually yes)
+  - If yes: keep the files and proceed.
+  - If unsure: exclude the warned files and proceed.
 
 ```bash
 python3 - <<'PY'
@@ -894,6 +959,9 @@ gh auth status
 
 gh repo view <owner>/<repo> 2>/dev/null || \
   gh repo create <repo> --public --description "OpenCode config bundle"
+
+# Add GitHub topics (idempotent)
+gh repo edit <owner>/<repo> --add-topic opendots --add-topic bundle
 
 cd <repo-dir>
 git init

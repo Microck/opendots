@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { buildServer } from '../src/app'
+import { buildServer } from '../backend/src/app'
 
 let serverPromise: Promise<import('fastify').FastifyInstance> | null = null
 

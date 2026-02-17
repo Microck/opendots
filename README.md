@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://opendots.me">
-    <img src="frontend/public/brand/opendots-logo-isometric.svg" width="100" alt="opendots logo" />
+    <img src="https://github.com/user-attachments/assets/61d056de-ff21-46b5-b7a2-225e6eddf535" width="100" alt="opendots logo" />
   </a>
 </p>
 
@@ -8,7 +8,6 @@
 
 <p align="center">
   <a href="https://opendots.me"><img alt="website" src="https://img.shields.io/badge/website-opendots.me-111111" /></a>
-  <a href="https://github.com/microck/opendots/actions/workflows/ci.yml"><img alt="ci" src="https://github.com/microck/opendots/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://opendots.me/docs"><img alt="docs" src="https://img.shields.io/badge/docs-opendots.me%2Fdocs-111111" /></a>
 </p>
 

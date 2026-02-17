@@ -724,6 +724,40 @@ if bad:
 PY
 ```
 
+5) Human verification (mandatory)
+
+AI is not a perfect secret detector. Before any `git commit` or `git push`, the human must personally verify the staged output is safe.
+
+Rules:
+
+- Do NOT paste secrets into chat/logs.
+- Open the file(s) locally in an editor.
+- If you see anything sensitive, STOP and fix it before pushing.
+
+Minimum review checklist:
+
+1) Open and review `opencode.public.json`
+- Confirm there is NO `environment` / `env` / `headers` / `Authorization` value.
+- Confirm there are NO passwords/tokens.
+- Confirm any personal data you care about is not present (emails, internal IPs, usernames).
+
+2) Use your editor's search (manual) on the staged repo directory
+
+Search for any of these strings (case-sensitive where applicable):
+
+- `environment`, `headers`, `Authorization`
+- `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `AUTH_TOKEN`
+- `ghp_`, `github_pat_`, `glpat-`, `xoxb-`, `vercel_blob_rw_`, `eyJ`
+- `@` (email-like), and any internal IP ranges you use (example: `10.`, `192.168.`, `172.16.`)
+
+If you find anything sensitive, remove it from the staged bundle or replace it with `<REDACTED>` BEFORE pushing.
+
+Then ask the human for a final explicit confirmation:
+
+```text
+I reviewed opencode.public.json and the repo contents. It contains no secrets. Proceed.
+```
+
 Redaction rules (when needed):
 - Replace secret values with `<REDACTED>`.
 - Do not leave partial tokens.

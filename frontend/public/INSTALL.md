@@ -187,7 +187,43 @@ rm /tmp/opendots-bundle.zip
 
 ---
 
-## Step 8 - Verify Install
+## Step 8 - Fill Redacted Values (interactive, recommended)
+
+Some bundles intentionally ship with placeholders like `<REDACTED>`, `<REDACTED_IP>`, or `<REDACTED_EMAIL>`.
+This is expected and is a safety feature.
+
+If you see these placeholders, you must fill them locally before the bundle works.
+
+Important rules:
+
+- Do NOT paste secrets into chat.
+- Enter secrets directly into your local files or your local environment variables.
+- Never commit these secrets back to GitHub.
+
+Find placeholders in the installed files:
+
+```bash
+# project scope
+rg -n "<REDACTED" . 2>/dev/null || true
+
+# global scope
+rg -n "<REDACTED" "$HOME/.config/opencode" 2>/dev/null || true
+```
+
+If `opencode.public.json` is present:
+
+- It is a *public* export; it will not include secret values.
+- Copy any MCP definitions you want to use into your local OpenCode config (commonly `~/.config/opencode/opencode.jsonc`).
+- Then add secrets locally, for example under the MCP entry's `environment` key.
+
+If the agent is assisting you:
+
+- The agent may list which files/keys are redacted.
+- The agent should ask what values you want to use, but you should type them into the file yourself.
+
+---
+
+## Step 9 - Verify Install
 
 ```bash
 # quick checks
@@ -197,7 +233,7 @@ ls -la commands/ 2>/dev/null || true
 ls -la skills/ 2>/dev/null || true
 ls -la plugins/ 2>/dev/null || true
 ls -la prompts/ 2>/dev/null || true
-ls -la opencode.json opencode.jsonc 2>/dev/null || true
+ls -la opendots.yml opencode.public.json 2>/dev/null || true
 ```
 
 Optional validation:
@@ -210,7 +246,7 @@ done
 
 ---
 
-## Step 9 - Report Outcome
+## Step 10 - Report Outcome
 
 Provide concise summary:
 

@@ -207,12 +207,6 @@ export default function Home({ isLoggedIn }: HomeProps) {
     'If you can run commands:',
     `curl -fsSL "${siteUrl('/PUBLISH.md')}" -o /tmp/opendots-PUBLISH.md`,
     "sed -n '1,120p' /tmp/opendots-PUBLISH.md",
-    '',
-    'I do not have a GitHub repo yet. Run the full publish flow including:',
-    '- creating the repository',
-    '- sanitizing secrets',
-    '- pushing files',
-    '- then registering on OpenDots.',
   ].join('\n')
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {

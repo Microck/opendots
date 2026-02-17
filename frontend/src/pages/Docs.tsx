@@ -69,7 +69,8 @@ export default function Docs() {
               <strong className="text-mono">Bundle Structure</strong>
               <pre className={styles.codeBlock}>
 {`my-opencode-config/
-├── opencode.json         # OpenCode configuration (JSONC)
+├── opencode.public.json  # Sanitized MCP definitions (no secrets)
+├── opendots.yml          # Bundle manifest (recommended)
 ├── AGENTS.md             # Agent instructions/rules
 ├── agent/                # Agent definitions (.md files)
 ├── command/              # Slash commands (.md files)
@@ -117,7 +118,7 @@ export default function Docs() {
               <strong className="text-mono">Project Scope</strong>
               <p className={styles.infoText}>
                 Extract the <strong>Project ZIP</strong> to your project root directory. 
-                This creates the bundle's configuration files (e.g., <code>opencode.json</code>,{' '}
+                This creates the bundle's configuration files (e.g., <code>opendots.yml</code>,{' '}
                 <code>agent/</code>, <code>plugins/</code>, etc.) in your project directory.
               </p>
               <pre className={styles.codeBlock}>
@@ -199,7 +200,7 @@ opencode`}
             <ul className={styles.list}>
               <li>
                 <strong>Schema Validation:</strong> Verifies that configuration files follow 
-                the expected structure for opencode.json, themes, and SKILL.md files.
+                the expected structure for manifests, themes, and SKILL.md files.
               </li>
               <li>
                 <strong>Risk Flag Detection:</strong> Identifies potentially risky patterns 

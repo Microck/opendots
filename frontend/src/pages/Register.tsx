@@ -177,7 +177,8 @@ export default function Register() {
                 </span>
                 <ul className={styles.requirementList}>
                   <li>Repo public access</li>
-                  <li><code>opencode.json</code> or <code>opendots.yml</code> at root (recommended)</li>
+                  <li><code>opendots.yml</code> at repo root (recommended)</li>
+                  <li><code>opencode.public.json</code> optional (sanitized MCP definitions only)</li>
                   <li>Valid JSON/YAML syntax in config files</li>
                 </ul>
               </motion.div>

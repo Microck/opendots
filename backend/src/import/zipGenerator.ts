@@ -29,20 +29,41 @@ function normalizePath(filePath: string): string | null {
 }
 
 /**
+ * GitHub zipballs include a single top-level directory like:
+ *   owner-repo-sha/<files>
+ *
+ * For installs we want the bundle contents at the zip root, so we strip
+ * the first path segment when possible.
+ */
+function stripLeadingZipRoot(normalizedPath: string): string {
+  const parts = normalizedPath.split(/[\/]+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return normalizedPath;
+  }
+
+  return parts.slice(1).join('/');
+}
+
+/**
  * Determine the output path for a file based on the ZIP variant
  */
 function getOutputPath(entryPath: string, variant: ZipVariant): string | null {
   const normalized = normalizePath(entryPath);
   if (normalized === null) return null;
+
+  const relative = stripLeadingZipRoot(normalized);
+  if (!relative) {
+    return null;
+  }
   
   if (variant === 'global') {
-    // Prefix paths for global install: ~/.config/opencode/
-    // e.g., "opendots.yml" -> ".config/opencode/opendots.yml"
-    return `.config/opencode/${normalized}`;
+    // Global variant: contents are laid out relative to the OpenCode config dir.
+    // The installer chooses the destination directory.
+    return relative;
   }
   
   // Project variant: files at root
-  return normalized;
+  return relative;
 }
 
 /**

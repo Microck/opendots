@@ -60,21 +60,25 @@ gh auth status
 
 # Get username (no guessing)
 GITHUB_USER="$(gh api user -q .login)"
-REPO_NAME="opendots-$GITHUB_USER"
+GITHUB_USER_LC="$(printf '%s' "$GITHUB_USER" | tr '[:upper:]' '[:lower:]')"
+REPO_NAME="opendots-$GITHUB_USER_LC"
 REPO_FULL="$GITHUB_USER/$REPO_NAME"
 ```
 
 2) Source directory for bundle files
-- Default order:
-  1. Use project-local `.opencode/` if it exists in the current repo.
-  2. Otherwise, ask the user for a directory path that contains the bundle content.
 
-Important: `~/.config/opencode` is usually NOT a safe publish source because it commonly contains machine-specific MCP config and secrets.
-Only use `~/.config/opencode` if the user explicitly asks for it.
+Default: ALWAYS publish from the global OpenCode config directory:
+
+```bash
+SRC_DIR="$HOME/.config/opencode"
+```
+
+Do not ask the user which directory to use.
+Only ask for a source path if `$HOME/.config/opencode` does not exist on their machine.
 
 Everything else (name/summary/tags/README) can be defaulted and edited later.
 
-Before doing irreversible actions (creating a public repo, pushing to GitHub, or calling claim complete), present a 5-line plan and ask for a single confirmation:
+Before doing irreversible actions (creating a repo, pushing to GitHub, or calling claim complete), present a 5-line plan and ask for a single confirmation.
 
 ```text
 READY TO PUBLISH
@@ -82,10 +86,15 @@ READY TO PUBLISH
 - Source path: <path>
 - Files to publish: <high-level list>
 - Secrets scan: 0 high-confidence matches
-Reply "go" to create/push the public repo.
+
+Repo visibility: PUBLIC (default)
+- OpenDots cannot fetch/import private repositories.
+- If the user insists on a private repo for personal testing, allow it, but STOP before Step 6 and tell them they must make it public themselves later.
+
+Reply "go" to create/push the PUBLIC repo.
 ```
 
-Do not proceed without an explicit affirmative ("go"/"yes"/"ok").
+Do not proceed without an explicit affirmative ("go").
 
 ---
 
@@ -124,6 +133,16 @@ Instead, ALWAYS generate `opencode.public.json` that:
 
 This is how you keep MCP definitions without leaking tokens/passwords.
 
+BANNED FILES (never publish, never commit):
+
+- `opencode.json*` (includes backups like `opencode.json.backup`, templates, tmp files, etc.)
+- `*.env*`
+- `*-accounts.json` / `*accounts*.json`
+- `*.log`
+- `id_rsa*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`
+
+If any of these show up in your repo directory at any time, delete them from the staged copy and re-run the audit.
+
 Symlinks:
 - Default: do not follow symlinks (exclude them). Symlinks often point to other repos or private paths.
 - Exception: you may dereference a symlink only if the target is inside the chosen source directory.
@@ -160,28 +179,19 @@ Special rule: do not publish raw OpenCode runtime configs.
 
 Process:
 
-1) Scan the source directory first (before copying) and list only:
-   - file path
-   - line number
-   - secret type (do NOT print the value)
+1) Build a staged directory using an allowlist copier.
 
-   Suggested scan (example patterns; use a conservative superset):
-
-   ```bash
-   rg -n --hidden --no-ignore-vcs \
-     '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9\-]{10,}|xox[baprs]-[A-Za-z0-9\-]{10,}|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|\bBearer\s+[A-Za-z0-9\-._~+/]+=*|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,})' \
-     <source-path>
-   ```
-
-   Do NOT paste matched values into chat.
-
-2) Build a staged directory using an allowlist copier.
+Do NOT run `rg` against the source directory.
+It prints matching lines, which can leak secrets into logs.
+Only scan the staged directory using the safe scanner in Step 3.
 
 Use this exact script (it is intentionally strict). It will also generate `opencode.public.json` if an `opencode.json` or `opencode.jsonc` exists in the source:
 
 ```bash
-SRC_DIR="<source-path>"
+SRC_DIR="$HOME/.config/opencode"
 STAGE_DIR="/tmp/opendots-stage"
+
+export SRC_DIR STAGE_DIR
 
 rm -rf "$STAGE_DIR"
 mkdir -p "$STAGE_DIR"
@@ -221,8 +231,10 @@ def is_bad_path(p: Path) -> bool:
     return True
   if 'accounts' in lower and lower.endswith('.json'):
     return True
-  if lower in ('opencode.json', 'opencode.jsonc'):
-    # never copy raw opencode configs; we generate opencode.public.json instead
+  if any(x in lower for x in ('.bak', '.backup', '.tmp', '.broken', '.corrupted')):
+    return True
+  if lower.startswith('opencode.json') or lower == 'opencode.jsonc':
+    # never copy raw opencode configs (or any backups); we generate opencode.public.json instead
     return True
   if lower.endswith(EXCLUDE_SUFFIXES):
     return True
@@ -357,6 +369,8 @@ SECRET_VALUE_PATTERNS = [
   r'\bxox[baprs]-[A-Za-z0-9\-]{10,}\b',
   # jwt-ish
   r'\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b',
+  # vercel blob
+  r'\bvercel_blob_rw_[A-Za-z0-9_\-]{10,}\b',
 ]
 
 def looks_like_secret_value(v: str) -> bool:
@@ -368,12 +382,88 @@ def looks_like_secret_value(v: str) -> bool:
 
 def is_secret_key(k: str) -> bool:
   up = k.upper()
-  return any(x in up for x in ('TOKEN', 'SECRET', 'PASSWORD', 'API_KEY', 'AUTH_TOKEN'))
+  return any(x in up for x in (
+    'TOKEN', 'SECRET', 'PASSWORD', 'PASSWD', 'PWD', 'API_KEY', 'AUTH_TOKEN',
+    'CLIENT_SECRET', 'ACCESS_TOKEN', 'REFRESH_TOKEN',
+  ))
+
+def is_privacy_key(k: str) -> bool:
+  # These are not always "secrets", but are frequently personal/private.
+  up = k.upper()
+  return any(x in up for x in (
+    'USER', 'USERNAME', 'LOGIN', 'EMAIL', 'HOST', 'HOSTNAME', 'IP', 'ADDRESS',
+  ))
+
+def redact_home_paths(s: str) -> str:
+  import re
+  # Linux
+  s = re.sub(r'\/home\/[^\/]+\/', '$HOME/', s)
+  # macOS
+  s = re.sub(r'\/Users\/[^\/]+\/', '$HOME/', s)
+  # Windows
+  s = re.sub(r'(?i)C:\\Users\\[^\\]+\\', r'%USERPROFILE%\\', s)
+  return s
+
+def redact_ipv4(s: str) -> str:
+  import re
+  return re.sub(r'\b(?:\d{1,3}\.){3}\d{1,3}\b', '<REDACTED_IP>', s)
+
+def redact_email(s: str) -> str:
+  import re
+  return re.sub(r'(?i)\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b', '<REDACTED_EMAIL>', s)
 
 def redact_url_credentials(s: str) -> str:
   # redact scheme://user:pass@host -> scheme://<REDACTED>@host
   import re
   return re.sub(r'(^[a-zA-Z]+:\/\/)([^\s:@/]+):([^\s@/]+)@', r'\1<REDACTED>@', s)
+
+def redact_url_query_secrets(s: str) -> str:
+  # redact query params like ?token=...&key=...
+  import re
+  return re.sub(r'(?i)([?&](?:token|secret|password|api[_-]?key|auth[_-]?token)=)([^&#\s]+)', r'\1<REDACTED>', s)
+
+def sanitize_args(args):
+  # Remove secret-ish flags and their values.
+  if not isinstance(args, list):
+    return args
+
+  secret_flags = {
+    '--token', '--auth-token', '--secret', '--password', '--pass', '--passwd', '--pwd',
+    '--api-key', '--apikey', '--key',
+    '--user', '--username', '--login', '--email', '--host', '--hostname', '--ip', '--address', '--url', '--endpoint', '--base-url',
+    '-t', '-k', '-p', '-u',
+  }
+
+  out = []
+  skip_next = False
+  for i, item in enumerate(args):
+    if skip_next:
+      skip_next = False
+      continue
+    if not isinstance(item, str):
+      continue
+
+    if item in secret_flags:
+      skip_next = True
+      continue
+
+    # redact any arg that looks like a secret value or PII
+    if looks_like_secret_value(item):
+      out.append('<REDACTED>')
+      continue
+
+    # redact obvious PII
+    if '@' in item:
+      out.append('<REDACTED>')
+      continue
+    if '.' in item and any(ch.isdigit() for ch in item):
+      # avoid leaking raw hosts like 10.0.0.1 / 1.2.3.4 / foo-123
+      out.append(redact_ipv4(item))
+      continue
+
+    out.append(item)
+
+  return out
 
 def sanitize(obj):
   if isinstance(obj, dict):
@@ -382,15 +472,26 @@ def sanitize(obj):
       if isinstance(k, str) and is_secret_key(k):
         out[k] = '<REDACTED>'
         continue
+      if isinstance(k, str) and is_privacy_key(k):
+        out[k] = '<REDACTED>'
+        continue
       # drop any environment blocks entirely
-      if k == 'environment' and isinstance(v, dict):
+      if k in ('environment', 'env', 'headers', 'header'):
+        continue
+
+      if k == 'args':
+        out[k] = sanitize_args(v)
         continue
       out[k] = sanitize(v)
     return out
   if isinstance(obj, list):
     return [sanitize(x) for x in obj]
   if isinstance(obj, str):
-    s = redact_url_credentials(obj)
+    s = obj
+    s = redact_home_paths(s)
+    s = redact_email(s)
+    s = redact_ipv4(s)
+    s = redact_url_query_secrets(redact_url_credentials(s))
     if looks_like_secret_value(s):
       return '<REDACTED>'
     return s
@@ -410,7 +511,8 @@ def generate_opencode_public(src: Path, dest: Path) -> bool:
 
   data = json.loads(text)
 
-  # Keep only $schema + mcp by default
+  # Keep only $schema + mcp by default.
+  # Everything inside mcp is sanitized aggressively (tokens + privacy).
   public_cfg = {}
   if isinstance(data, dict):
     if '$schema' in data:
@@ -418,6 +520,20 @@ def generate_opencode_public(src: Path, dest: Path) -> bool:
     if 'mcp' in data:
       public_cfg['mcp'] = data['mcp']
   public_cfg = sanitize(public_cfg)
+
+  # Invariant: do not allow raw environment keys to survive in public export.
+  def fail_if_found_keys(obj, keys):
+    if isinstance(obj, dict):
+      for k, v in obj.items():
+        if k in keys:
+          raise ValueError(f"Found banned key in public export: {k}")
+        fail_if_found_keys(v, keys)
+    elif isinstance(obj, list):
+      for x in obj:
+        fail_if_found_keys(x, keys)
+
+  fail_if_found_keys(public_cfg, {'environment', 'env', 'headers', 'header'})
+
   (dest / 'opencode.public.json').write_text(json.dumps(public_cfg, indent=2) + "\n", encoding='utf-8')
   return True
 
@@ -438,20 +554,175 @@ print(f"Staged bundle written to: {DEST}")
 PY
 ```
 
+2) AI audit the staged files (mandatory)
+
+Use your agent capabilities to inspect the staged directory contents BEFORE any git commit.
+
+Rules:
+
+- Inspect every file under `$STAGE_DIR`.
+- Do not print secret values (do not paste lines that contain tokens).
+- If you see any sensitive values, exclude the file or redact the value in the staged copy.
+
+You are explicitly looking for:
+
+- Any `environment` / `env` / `headers` / `Authorization` values that contain real secrets
+- Any of these key names anywhere in the staged files:
+  - `DISCORD_TOKEN`, `KAGI_TOKEN`, `N8N_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`,
+    `SLACK_BOT_TOKEN`, `UPSTASH_REDIS_REST_TOKEN`, `TURSO_AUTH_TOKEN`, `BLOB_READ_WRITE_TOKEN`
+- Any long opaque strings that look like tokens (JWTs, `vercel_blob_rw_...`, GitHub/GitLab/Slack tokens)
+
+If you find anything suspicious:
+
+- Prefer excluding the file from the published bundle.
+- Re-run the safe scanner (Step 3) until `MATCH_COUNT` is `0`.
+
+Hard rule (do not improvise): if `opencode.json` (or any `opencode.json*`) exists in the staged repo, STOP and remove it.
+
 3) Scan the staged directory (this is the gate).
 
-Use this exact command:
+Do NOT use `rg` for this scan.
+`rg` prints matching lines, which can leak secrets.
+
+Use this exact safe scanner (prints only file + line + label, never values):
 
 ```bash
-rg -n --hidden --no-ignore-vcs \
-  '(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9\-]{10,}|xox[baprs]-[A-Za-z0-9\-]{10,}|-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|\bBearer\s+[A-Za-z0-9\-._~+/]+=*|\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}|(?i)(token|secret|password|api[_-]?key)\s*[:=]\s*["\x27][^"\x27]{8,}["\x27])' \
-  "$STAGE_DIR" && echo "FOUND_SECRETS" && exit 1
+python3 - <<'PY'
+import os
+import re
+from pathlib import Path
+
+STAGE = Path(os.environ.get('STAGE_DIR', '/tmp/opendots-stage')).resolve()
+
+EXCLUDE_DIRS = {'.git','node_modules','__pycache__','.ruff_cache'}
+EXCLUDE_SUFFIXES = ('.log', '.pem', '.key', '.p12', '.pfx')
+
+# High-confidence patterns only (fail closed)
+PATTERNS = [
+  ('github_token', re.compile(r'\b(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b')),
+  ('gitlab_token', re.compile(r'\bglpat-[A-Za-z0-9\-]{20}\b')),
+  ('slack_token', re.compile(r'\bxox[baprs]-[A-Za-z0-9\-]{20,}\b')),
+  ('stripe_secret', re.compile(r'\bsk_(?:test|live)_[A-Za-z0-9]{24,}\b')),
+  ('vercel_blob_token', re.compile(r'\bvercel_blob_rw_[A-Za-z0-9_\-]{10,}\b')),
+  ('known_secret_key_name', re.compile(r'(?i)\b(DISCORD_TOKEN|KAGI_TOKEN|N8N_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|GOOGLE_API_KEY|SLACK_BOT_TOKEN|UPSTASH_REDIS_REST_TOKEN|TURSO_AUTH_TOKEN|BLOB_READ_WRITE_TOKEN)\b')),
+  ('aws_access_key', re.compile(r'\b(AKIA|ASIA)[0-9A-Z]{16}\b')),
+  ('private_key_block', re.compile(r'-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----')),
+  ('jwt_like', re.compile(r'\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b')),
+  ('conn_string_pw', re.compile(r'(?:mongodb|postgres|mysql|redis):\\/\\/[^:\s]+:[^@\s]+@', re.I)),
+  ('key_assignment_secret', re.compile(r'(?i)\b(token|secret|password|pass|passwd|pwd|api[_-]?key|auth[_-]?token)\b\s*[:=]\s*["\x27][^"\x27]{6,}["\x27]')),
+  ('ipv4_address', re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')),
+]
+
+MAX_BYTES = 1024 * 1024
+
+def excluded_path(p: Path) -> bool:
+  parts = set(p.parts)
+  if any(d in parts for d in EXCLUDE_DIRS):
+    return True
+  lower = p.name.lower()
+  if lower.startswith('.env'):
+    return True
+  if lower.endswith(EXCLUDE_SUFFIXES):
+    return True
+  return False
+
+files_scanned = 0
+matches = []
+
+for root, dirs, files in os.walk(STAGE):
+  dirs[:] = [d for d in dirs if d not in EXCLUDE_DIRS]
+  root_p = Path(root)
+  for fn in files:
+    p = root_p / fn
+    if excluded_path(p):
+      continue
+    try:
+      if p.stat().st_size > MAX_BYTES:
+        continue
+      lines = p.read_text(encoding='utf-8', errors='ignore').splitlines()
+    except Exception:
+      continue
+    files_scanned += 1
+    for i, line in enumerate(lines, start=1):
+      for label, rx in PATTERNS:
+        if rx.search(line):
+          matches.append((p, i, label))
+
+print(f"FILES_SCANNED\t{files_scanned}")
+for p, i, label in matches:
+  rel = p.relative_to(STAGE)
+  print(f"MATCH\t{rel}:{i}\t{label}")
+print(f"MATCH_COUNT\t{len(matches)}")
+
+out = Path('/tmp/opendots-secret-matches.txt')
+out.write_text(''.join([str(p.relative_to(STAGE)) + "\n" for (p,_,_) in matches]), encoding='utf-8')
+PY
 ```
 
-If this finds anything:
-- redact or exclude the file(s)
-- re-run the scan
-- do not proceed until it finds nothing
+If `MATCH_COUNT` is not `0`, sanitize by excluding the matched files from the staged bundle (default).
+Do NOT try to rewrite large documentation sets to remove example tokens.
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+
+STAGE = Path('/tmp/opendots-stage').resolve()
+matches = Path('/tmp/opendots-secret-matches.txt')
+paths = sorted(set([p.strip() for p in matches.read_text(encoding='utf-8').splitlines() if p.strip()]))
+
+if not paths:
+  raise SystemExit('No matched files listed; nothing to exclude.')
+
+blocked = []
+excluded = 0
+
+for rel in paths:
+  if rel == 'opencode.public.json':
+    blocked.append(rel)
+    continue
+  target = (STAGE / rel)
+  if target.exists() and target.is_file():
+    target.unlink()
+    excluded += 1
+
+print(f"EXCLUDED_FILES\t{excluded}")
+if blocked:
+  print('BLOCKED_FILES\t' + ','.join(blocked))
+  raise SystemExit('Refusing to exclude required file(s). Fix sanitization and re-run.')
+PY
+```
+
+Then re-run the safe scanner until `MATCH_COUNT` is `0`.
+
+4) Final banned-file check (mandatory)
+
+Run this check on the repo directory RIGHT BEFORE `git add`.
+It must report zero.
+
+```bash
+python3 - <<'PY'
+from pathlib import Path
+
+REPO_DIR = Path('.').resolve()
+
+banned_prefixes = ['opencode.json']
+banned_names = {'opencode.jsonc'}
+
+bad = []
+for p in REPO_DIR.rglob('*'):
+  if not p.is_file():
+    continue
+  name = p.name.lower()
+  if any(name.startswith(x) for x in banned_prefixes) or name in banned_names:
+    bad.append(str(p.relative_to(REPO_DIR)))
+
+print(f"BANNED_FILE_COUNT\t{len(bad)}")
+for x in bad[:200]:
+  print(f"BANNED\t{x}")
+if bad:
+  raise SystemExit('Banned files present. Remove them and re-run.')
+PY
+```
 
 Redaction rules (when needed):
 - Replace secret values with `<REDACTED>`.
@@ -465,7 +736,7 @@ SECURITY AUDIT RESULTS
 - Scanned files: <N>
 - High-confidence secret matches: <N>  (must be 0 to proceed)
 - Sanitized: <count> (redactions)
-- Excluded: <count> (files)
+- Excluded: <count> (files; list paths)
 ```
 
 If the user previously pasted a token in chat, tell them to rotate it.
@@ -592,7 +863,12 @@ gh repo view <owner>/<repo> 2>/dev/null || \
 
 cd <repo-dir>
 git init
-git add .
+
+# IMPORTANT: do NOT run `git add .`.
+# Add only the allowlisted bundle files. This prevents accidentally committing banned files.
+git add -- README.md opendots.yml opencode.public.json
+git add -- AGENTS.md CLAUDE.md agents agent command commands skills themes plugins disabled-plugins tools prompts modes scripts 2>/dev/null || true
+
 git commit -m "feat: publish OpenDots bundle"
 git branch -M main
 git remote add origin https://github.com/<owner>/<repo>.git
@@ -602,6 +878,10 @@ git push -u origin main
 ---
 
 ## Step 6 - Register on OpenDots
+
+If the repo is private:
+- Stop here. OpenDots cannot fetch/import private repositories.
+- If you later change the repo to public, then continue with Step 6.
 
 ### Option A: Claim flow (no web login)
 

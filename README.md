@@ -15,28 +15,34 @@
 
 ## what is this
 
-opendots is a small full-stack app:
+opendots is a public directory for opencode configuration bundles.
 
-- frontend: public website and ui for browsing bundles
-- backend: api for auth, publishing, downloads, and previews
+publishers connect github, register a repo, and opendots imports a snapshot of the config so it can be previewed, scanned, and downloaded.
+
+## how it works
+
+- browse bundles with safety signals and file previews
+- publish by linking a github repo and claiming ownership
+- download a zip you can install into a project or your global opencode config
 
 ## architecture
 
 ```mermaid
 flowchart lr
-  user[browser] --> fe[frontend (vite + react)]
-  fe -->|http| be[backend (fastify)]
-  be --> db[(sqlite / turso)]
-  be --> gh[github oauth]
-  be --> blob[vercel blob (optional)]
+  u[browser] --> site[opendots ui]
+  site -->|/api/*| fn[vercel function]
+  fn --> api[api router]
+  api --> db[(database)]
+  api --> gh[github oauth]
+  api --> snap[snapshots (optional blob)]
 ```
 
 ## repo layout
 
 ```
-frontend/  react + vite + typescript
-backend/   fastify + typescript + drizzle
-api/       vercel serverless function (mounts backend at /api/*)
+frontend/  web ui
+backend/   api implementation
+api/       vercel function entrypoint (mounts backend at /api/*)
 ```
 
 ## local dev

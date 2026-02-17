@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import { publisherBundle } from './publisher';
+import { publisherBundle } from './publisher.js';
 
 export const importRun = sqliteTable('import_run', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),

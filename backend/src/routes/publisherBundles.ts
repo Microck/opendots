@@ -1,15 +1,15 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
-import { auth } from '../auth/auth';
-import { dbInstance as db } from '../db/db';
-import { account } from '../db/schema/auth';
-import { publisherBundle } from '../db/schema/publisher';
+import { auth } from '../auth/auth.js';
+import { dbInstance as db } from '../db/db.js';
+import { account } from '../db/schema/auth.js';
+import { publisherBundle } from '../db/schema/publisher.js';
 import { eq, and, desc, isNull, sql } from 'drizzle-orm';
-import { createGitHubClient, getRepoInfo, getFileContent, getAuthenticatedUser, type GitHubRepoInfo } from '../github/githubClient';
-import { fetchAndValidateManifest } from '../import/manifest';
-import { importBundle, getLastImport } from '../import/importer';
-import { importRun, snapshot } from '../db/schema/imports';
-import type { FileIndexEntry } from '../import/fileIndex';
+import { createGitHubClient, getRepoInfo, getFileContent, getAuthenticatedUser, type GitHubRepoInfo } from '../github/githubClient.js';
+import { fetchAndValidateManifest } from '../import/manifest.js';
+import { importBundle, getLastImport } from '../import/importer.js';
+import { importRun, snapshot } from '../db/schema/imports.js';
+import type { FileIndexEntry } from '../import/fileIndex.js';
 
 const REPO_NAME_REGEX = /^[a-zA-Z0-9._-]{1,100}$/;
 

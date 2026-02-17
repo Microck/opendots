@@ -11,6 +11,7 @@ import { motion } from 'motion/react'
 import BundleCard, { type BundleCardData } from '../components/BundleCard'
 import TurnstileWidget from '../components/TurnstileWidget'
 import ClickSpark from '../reactbits/ClickSpark'
+import { AnimatedText } from '../components/animations'
 import { apiUrl } from '../lib/apiBase'
 import { siteUrl } from '../lib/siteBase'
 import { useReducedMotion } from '../hooks/useReducedMotion'
@@ -46,12 +47,11 @@ function ScrambleReveal({
   useEffect(() => {
     let raf: number
     let frame = 0
-    const totalFrames = text.length * 4 // slower
+    const totalFrames = text.length * 4
     const startTime = performance.now() + delay * 1000
 
     const tick = (now: number) => {
       if (now < startTime) {
-        // While waiting, keep scrambling so it looks alive
         setDisplay(
           text
             .split('')
@@ -194,7 +194,7 @@ export default function Home({ isLoggedIn }: HomeProps) {
     if (!claimResult) return ''
     const repoUrl = `https://github.com/${claimResult.repoFullName}`
     return [
-      `Fetch and follow ${siteUrl('/PUBLISH.md')}`,
+      `Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`,
       '',
       `Bundle repo: ${repoUrl}`,
       `Claim file: ${claimResult.claimFilePath}`,
@@ -202,7 +202,11 @@ export default function Home({ isLoggedIn }: HomeProps) {
     ].join('\n')
   }, [claimResult])
   const fullPublishProtocolPrompt = [
-    `Fetch and follow ${siteUrl('/PUBLISH.md')}`,
+    `Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`,
+    '',
+    'If you can run commands:',
+    `curl -fsSL "${siteUrl('/PUBLISH.md')}" -o /tmp/opendots-PUBLISH.md`,
+    "sed -n '1,120p' /tmp/opendots-PUBLISH.md",
     '',
     'I do not have a GitHub repo yet. Run the full publish flow including:',
     '- creating the repository',
@@ -485,7 +489,7 @@ export default function Home({ isLoggedIn }: HomeProps) {
             </motion.span>
           </h1>
 
-          {/* ── Description — fade in up ────────────────────────── */}
+          {/* ── Description — fade in up with word hover ───────────── */}
           <motion.p
             className={styles.heroDescription}
             data-gsap="text"
@@ -493,8 +497,14 @@ export default function Home({ isLoggedIn }: HomeProps) {
             animate={m ? { opacity: 1, y: 0 } : undefined}
             transition={{ delay: 1.4, duration: 0.6, ease: [...easeCurve] }}
           >
-            OpenDots is a community portal to discover, share, and verify
-            OpenCode configuration bundles.
+            {m ? (
+              <AnimatedText as="span" hoverY={-3} hoverDuration={0.2}>
+                OpenDots is a community portal to discover, share, and verify
+                OpenCode configuration bundles.
+              </AnimatedText>
+            ) : (
+              'OpenDots is a community portal to discover, share, and verify OpenCode configuration bundles.'
+            )}
           </motion.p>
 
           {/* ── CTAs — spring up ─────────────────────────────────── */}

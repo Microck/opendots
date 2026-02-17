@@ -1,6 +1,6 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
-import { auth } from './auth';
+import { auth } from './auth.js';
 
 export const fastifyAuthRoute: FastifyPluginAsync = fp(async (fastify, options) => {
   await fastify.route({

@@ -265,7 +265,7 @@ opencode`}
                 Copy this prompt into OpenCode (or any coding agent):
               </p>
               <pre className={styles.codeBlock}>
-{`Fetch and follow ${siteUrl('/PUBLISH.md')}`}
+{`Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`}
               </pre>
               <p className={styles.infoText} style={{ marginTop: 'var(--space-sm)' }}>
                 This protocol includes mandatory secret checks and a canonical publishing workflow.
@@ -281,7 +281,7 @@ opencode`}
             >
               <motion.li variants={v(staggerItem)}>
                 <strong>Run the AI publish protocol</strong> — Use
-                <code> Fetch and follow {siteUrl('/PUBLISH.md')} </code>
+                <code> Fetch {siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search. </code>
                 as your default path.
               </motion.li>
               <motion.li variants={v(staggerItem)}>
@@ -303,8 +303,8 @@ license: MIT`}
                 </pre>
               </motion.li>
               <motion.li variants={v(staggerItem)}>
-                <strong>Add your configuration</strong> — Add your <code>opencode.json</code>, 
-                themes, skills, and other artifacts to the repository.
+                <strong>Add your configuration</strong> — Add your themes, skills, commands, and other artifacts to the repository.
+                If you want to include MCP definitions, include a sanitized <code>opencode.public.json</code> (never publish raw <code>opencode.json</code>).
               </motion.li>
               <motion.li variants={v(staggerItem)}>
                 <strong>Register on OpenDots</strong> — Visit your Dashboard and use one-click publish.

@@ -1,8 +1,8 @@
 import { type ReactNode } from 'react'
 import { motion } from 'motion/react'
-import { useEffect, useRef } from 'react'
-import { gsap } from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
+import { useRef } from 'react'
+import { useGSAP } from '@gsap/react'
+import { gsap, ScrollTrigger } from '../lib/gsap'
 import { useReducedMotion } from '../hooks/useReducedMotion'
 
 interface PageTransitionProps {
@@ -48,54 +48,47 @@ export default function PageTransition({ children, className }: PageTransitionPr
   const prefersReducedMotion = useReducedMotion()
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  useEffect(() => {
+  useGSAP(() => {
     if (prefersReducedMotion) return
-    if (!rootRef.current) return
-
-    gsap.registerPlugin(ScrollTrigger)
 
     const scope = rootRef.current
+    if (!scope) return
 
-    const ctx = gsap.context(() => {
-      const q = gsap.utils.selector(scope)
-      const nodes = (q('[data-gsap="text"]') as HTMLElement[]) ?? []
-      const limited = nodes.slice(0, 80)
+    const q = gsap.utils.selector(scope)
+    const nodes = q('[data-gsap="text"]') as HTMLElement[]
+    const limited = nodes.slice(0, 80)
 
-      for (const el of limited) {
-        if (!el || el.dataset.gsapBound === '1') continue
-        el.dataset.gsapBound = '1'
+    limited.forEach((el) => {
+      if (!el || el.dataset.gsapBound === '1') return
+      el.dataset.gsapBound = '1'
 
-        gsap.set(el, {
-          opacity: 0,
-          y: 12,
-          filter: 'blur(6px)',
-          clipPath: 'inset(0 0 100% 0)',
-        })
+      gsap.set(el, {
+        opacity: 0,
+        y: 12,
+        filter: 'blur(6px)',
+        clipPath: 'inset(0 0 100% 0)',
+      })
 
-        gsap.to(el, {
-          opacity: 1,
-          y: 0,
-          filter: 'blur(0px)',
-          clipPath: 'inset(0 0 0% 0)',
-          duration: 0.7,
-          ease: 'power3.out',
-          scrollTrigger: {
-            trigger: el,
-            start: 'top 88%',
-            once: true,
-          },
-        })
-      }
-    }, rootRef)
+      gsap.to(el, {
+        opacity: 1,
+        y: 0,
+        filter: 'blur(0px)',
+        clipPath: 'inset(0 0 0% 0)',
+        duration: 0.7,
+        ease: 'power3.out',
+        scrollTrigger: {
+          trigger: el,
+          start: 'top 88%',
+          once: true,
+        },
+      })
+    })
 
-    // Page transitions can shift layout; refresh triggers once the paint settles.
     const id = window.setTimeout(() => ScrollTrigger.refresh(), 50)
-
     return () => {
       window.clearTimeout(id)
-      ctx.revert()
     }
-  }, [prefersReducedMotion])
+  }, { scope: rootRef, dependencies: [prefersReducedMotion] })
 
   if (prefersReducedMotion) {
     return <div className={className}>{children}</div>

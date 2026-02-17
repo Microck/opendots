@@ -1,14 +1,14 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
 import { randomBytes } from 'node:crypto';
-import { dbInstance as db } from '../db/db';
-import { publishClaim, publisherBundle } from '../db/schema/publisher';
+import { dbInstance as db } from '../db/db.js';
+import { publishClaim, publisherBundle } from '../db/schema/publisher.js';
 import { and, desc, eq, sql } from 'drizzle-orm';
-import { fetchAndValidateManifest } from '../import/manifest';
-import { importBundlePublic } from '../import/importer';
-import { getPublicFileContent, getPublicRepoInfo } from '../github/publicGitHub';
-import { checkRateLimit } from '../security/rateLimit';
-import { verifyTurnstileToken } from '../security/turnstile';
+import { fetchAndValidateManifest } from '../import/manifest.js';
+import { importBundlePublic } from '../import/importer.js';
+import { getPublicFileContent, getPublicRepoInfo } from '../github/publicGitHub.js';
+import { checkRateLimit } from '../security/rateLimit.js';
+import { verifyTurnstileToken } from '../security/turnstile.js';
 
 const REPO_NAME_REGEX = /^[a-zA-Z0-9._-]{1,100}$/;
 const CLAIM_TTL_MS = 30 * 60 * 1000;
@@ -37,6 +37,10 @@ function getClientIp(request: any): string {
     return xff.split(',')[0].trim();
   }
   return request.ip || 'unknown';
+}
+
+function isRateLimited(result: Awaited<ReturnType<typeof checkRateLimit>>): result is { allowed: false; remaining: 0; resetAt: number; retryAfterMs: number } {
+  return result.allowed === false;
 }
 
 function parseRepoInput(repoInput: string): { owner: string; repo: string; fullName: string } | null {
@@ -89,7 +93,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
     try {
       const ip = getClientIp(request);
       const ipLimit = await checkRateLimit(`publish-claim-start:ip:${ip}`, { windowMs: 10 * 60 * 1000, max: 12 });
-      if (!ipLimit.allowed) {
+      if (isRateLimited(ipLimit)) {
         reply.header('Retry-After', Math.ceil(ipLimit.retryAfterMs / 1000));
         reply.code(429);
         return { code: 'RATE_LIMITED', message: 'Too many requests. Please wait and try again.' };
@@ -115,7 +119,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       const repoLimit = await checkRateLimit(`publish-claim-start:repo:${parsed.fullName.toLowerCase()}`, { windowMs: 60 * 60 * 1000, max: 6 });
-      if (!repoLimit.allowed) {
+      if (isRateLimited(repoLimit)) {
         reply.header('Retry-After', Math.ceil(repoLimit.retryAfterMs / 1000));
         reply.code(429);
         return { code: 'RATE_LIMITED', message: 'Too many claim attempts for this repository. Please try again later.' };
@@ -208,7 +212,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
     try {
       const ip = getClientIp(request);
       const ipLimit = await checkRateLimit(`publish-claim-complete:ip:${ip}`, { windowMs: 10 * 60 * 1000, max: 30 });
-      if (!ipLimit.allowed) {
+      if (isRateLimited(ipLimit)) {
         reply.header('Retry-After', Math.ceil(ipLimit.retryAfterMs / 1000));
         reply.code(429);
         return { code: 'RATE_LIMITED', message: 'Too many requests. Please wait and try again.' };
@@ -239,7 +243,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       const repoLimit = await checkRateLimit(`publish-claim-complete:repo:${parsed.fullName.toLowerCase()}`, { windowMs: 60 * 60 * 1000, max: 10 });
-      if (!repoLimit.allowed) {
+      if (isRateLimited(repoLimit)) {
         reply.header('Retry-After', Math.ceil(repoLimit.retryAfterMs / 1000));
         reply.code(429);
         return { code: 'RATE_LIMITED', message: 'Too many publish attempts for this repository. Please try again later.' };

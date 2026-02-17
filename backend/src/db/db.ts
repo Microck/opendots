@@ -1,9 +1,11 @@
 import { createClient } from '@libsql/client';
 import { drizzle } from 'drizzle-orm/libsql';
+import { migrate } from 'drizzle-orm/libsql/migrator';
+import { fileURLToPath } from 'node:url';
 
-import * as authSchema from './schema/auth';
-import * as publisherSchema from './schema/publisher';
-import * as importsSchema from './schema/imports';
+import * as authSchema from './schema/auth.js';
+import * as publisherSchema from './schema/publisher.js';
+import * as importsSchema from './schema/imports.js';
 
 function getDatabaseConfig() {
   const url =
@@ -34,3 +36,15 @@ export const dbSchema = {
 };
 
 export const dbInstance = drizzle({ client: libsqlClient, schema: dbSchema });
+
+let migratePromise: Promise<void> | null = null;
+
+export async function ensureDatabaseMigrated() {
+  if (!migratePromise) {
+    // `drizzle-turso` is the canonical migration folder for libsql/Turso.
+    const migrationsFolder = fileURLToPath(new URL('../../drizzle-turso', import.meta.url));
+    migratePromise = migrate(dbInstance, { migrationsFolder });
+  }
+
+  return migratePromise;
+}

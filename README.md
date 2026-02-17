@@ -33,8 +33,8 @@ instead of copy-pasting random dotfiles from github, you can:
 - website: https://opendots.me
 - browse: https://opendots.me/browse
 - docs: https://opendots.me/docs
-- publish: https://opendots.me/publish.md
-- install: https://opendots.me/install.md
+- publish: https://opendots.me/PUBLISH.md
+- install: https://opendots.me/INSTALL.md
 
 ## how it works
 

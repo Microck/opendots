@@ -1,4 +1,4 @@
-import { buildServer } from './app';
+import { buildServer } from './app.js';
 
 const PORT = Number(process.env.PORT) || 8788;
 

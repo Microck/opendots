@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
-import { dbInstance as db } from '../db/db';
-import * as schema from '../db/schema/auth';
+import { dbInstance as db } from '../db/db.js';
+import * as schema from '../db/schema/auth.js';
 
 const authBaseURL = process.env.BETTER_AUTH_BASE_URL;
 const appBaseURL = process.env.APP_BASE_URL;

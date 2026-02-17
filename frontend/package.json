@@ -11,6 +11,7 @@
     "svgo:logo": "svgo --config=svgo.config.mjs -i public/brand/opendots-logo-isometric.svg -o public/brand/opendots-logo-isometric.svg"
   },
   "dependencies": {
+    "@gsap/react": "^2.1.2",
     "@phosphor-icons/react": "^2.1.10",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",

@@ -141,7 +141,7 @@ export default function Dashboard() {
   const [publishPromptCopied, setPublishPromptCopied] = useState(false)
   const editorNameRef = useRef<HTMLInputElement>(null)
   const prefersReducedMotion = useReducedMotion()
-  const publishPrompt = `Fetch and follow ${siteUrl('/PUBLISH.md')}`
+  const publishPrompt = `Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`
 
   const m = !prefersReducedMotion
 

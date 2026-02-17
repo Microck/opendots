@@ -1,13 +1,13 @@
 import { FastifyPluginAsync } from 'fastify';
 import fp from 'fastify-plugin';
-import { dbInstance as db } from '../db/db';
-import { publisherBundle } from '../db/schema/publisher';
-import { snapshot, importRun } from '../db/schema/imports';
+import { dbInstance as db } from '../db/db.js';
+import { publisherBundle } from '../db/schema/publisher.js';
+import { snapshot, importRun } from '../db/schema/imports.js';
 import { eq, desc } from 'drizzle-orm';
-import { extractFileFromZip } from '../import/fileIndex';
-import { generateZipStream, isValidVariant } from '../import/zipGenerator';
+import { extractFileFromZip } from '../import/fileIndex.js';
+import { generateZipStream, isValidVariant } from '../import/zipGenerator.js';
 import { parse as parseJsonc } from 'comment-json';
-import { materializeSnapshotToLocal } from '../storage/snapshots';
+import { materializeSnapshotToLocal } from '../storage/snapshots.js';
 
 const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
 

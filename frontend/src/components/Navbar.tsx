@@ -1,6 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { useGSAP } from '@gsap/react'
+import { gsap, SplitText } from '../lib/gsap'
 import { authClient } from '../lib/authClient'
 import { useReducedMotion } from '../hooks/useReducedMotion'
 import { navSlideDown, navStagger, navItem } from '../styles/animations'
@@ -17,6 +19,61 @@ interface SessionUser {
 interface NavbarProps {
   isLoggedIn: boolean
   user: SessionUser | null
+}
+
+function AnimatedNavLink({ 
+  children, 
+  to, 
+  disabled 
+}: { 
+  children: string
+  to: string
+  disabled?: boolean 
+}) {
+  const linkRef = useRef<HTMLAnchorElement>(null)
+  const prefersReducedMotion = useReducedMotion()
+
+  useGSAP(() => {
+    if (prefersReducedMotion || disabled) return
+    if (!linkRef.current) return
+
+    const link = linkRef.current
+    const split = new SplitText(link, { type: 'chars' })
+    const chars = split.chars
+
+    const handleEnter = () => {
+      gsap.to(chars, {
+        y: -3,
+        duration: 0.2,
+        ease: 'power2.out',
+        stagger: { each: 0.015, from: 'start' },
+      })
+    }
+
+    const handleLeave = () => {
+      gsap.to(chars, {
+        y: 0,
+        duration: 0.2,
+        ease: 'power2.out',
+        stagger: { each: 0.01, from: 'end' },
+      })
+    }
+
+    link.addEventListener('mouseenter', handleEnter)
+    link.addEventListener('mouseleave', handleLeave)
+
+    return () => {
+      link.removeEventListener('mouseenter', handleEnter)
+      link.removeEventListener('mouseleave', handleLeave)
+      split.revert()
+    }
+  }, { scope: linkRef, dependencies: [children, prefersReducedMotion, disabled] })
+
+  return (
+    <Link ref={linkRef} to={to} className={styles.navItem}>
+      {children}
+    </Link>
+  )
 }
 
 export default function Navbar({ isLoggedIn, user }: NavbarProps) {
@@ -55,13 +112,13 @@ export default function Navbar({ isLoggedIn, user }: NavbarProps) {
           animate="visible"
         >
           <motion.div variants={prefersReducedMotion ? undefined : navItem}>
-            <Link to="/" className={styles.navItem}>Home</Link>
+            <AnimatedNavLink to="/">Home</AnimatedNavLink>
           </motion.div>
           <motion.div variants={prefersReducedMotion ? undefined : navItem}>
-            <Link to="/browse" className={styles.navItem}>Browse</Link>
+            <AnimatedNavLink to="/browse">Browse</AnimatedNavLink>
           </motion.div>
           <motion.div variants={prefersReducedMotion ? undefined : navItem}>
-            <Link to="/docs" className={styles.navItem}>Docs</Link>
+            <AnimatedNavLink to="/docs">Docs</AnimatedNavLink>
           </motion.div>
           {isLoggedIn ? (
             <>

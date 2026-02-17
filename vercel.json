@@ -3,7 +3,33 @@
   "installCommand": "npm install -C frontend && npm install -C backend",
   "buildCommand": "npm run build -C frontend",
   "outputDirectory": "frontend/dist",
+  "redirects": [
+    {
+      "source": "/publish.md",
+      "destination": "/PUBLISH.md",
+      "permanent": true
+    },
+    {
+      "source": "/Publish.md",
+      "destination": "/PUBLISH.md",
+      "permanent": true
+    },
+    {
+      "source": "/install.md",
+      "destination": "/INSTALL.md",
+      "permanent": true
+    },
+    {
+      "source": "/Install.md",
+      "destination": "/INSTALL.md",
+      "permanent": true
+    }
+  ],
   "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api?path=$1"
+    },
     {
       "source": "/((?!api).*)",
       "destination": "/index.html"

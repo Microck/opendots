@@ -1,4 +1,4 @@
-import Ajv from 'ajv';
+import AjvImport from 'ajv';
 import { parse as parseJsonc } from 'comment-json';
 import matter from 'gray-matter';
 import * as fs from 'fs/promises';
@@ -77,6 +77,9 @@ export interface ValidationResult {
   skills: SkillValidationResult[];
 }
 
+// Vercel typechecks this file without our backend tsconfig, so Ajv's types
+// can be interpreted as a non-constructable module namespace. Keep it runtime-correct.
+const Ajv: any = (AjvImport as any).default ?? AjvImport;
 const ajv = new Ajv({ allErrors: true, allowUnionTypes: true });
 
 /**

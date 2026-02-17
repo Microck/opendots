@@ -1,14 +1,14 @@
 import { Octokit } from 'octokit';
-import { dbInstance as db } from '../db/db';
-import { importRun, snapshot } from '../db/schema/imports';
-import { publisherBundle } from '../db/schema/publisher';
+import { dbInstance as db } from '../db/db.js';
+import { importRun, snapshot } from '../db/schema/imports.js';
+import { publisherBundle } from '../db/schema/publisher.js';
 import { eq, desc, and } from 'drizzle-orm';
-import { createGitHubClient, getRepoInfo } from '../github/githubClient';
-import { saveSnapshot } from '../storage/snapshots';
-import { buildFileIndex, extractFileFromZip, type FileIndexEntry } from './fileIndex';
-import { validateSnapshot } from './validator';
-import { scanForRisks } from './riskScanner';
-import { scanForSecrets, SECRET_SCAN_DISCLAIMER } from './secretScanner';
+import { createGitHubClient, getRepoInfo } from '../github/githubClient.js';
+import { saveSnapshot } from '../storage/snapshots.js';
+import { buildFileIndex, extractFileFromZip, type FileIndexEntry } from './fileIndex.js';
+import { validateSnapshot } from './validator.js';
+import { scanForRisks } from './riskScanner.js';
+import { scanForSecrets, SECRET_SCAN_DISCLAIMER } from './secretScanner.js';
 import AdmZip from 'adm-zip';
 import { parse as parseJsonc } from 'comment-json';
 import * as fs from 'fs/promises';
@@ -232,7 +232,7 @@ export async function importBundlePublic(bundleId: string): Promise<ImportResult
     const bundleData = bundle[0];
     const { githubOwner, githubRepo } = bundleData;
 
-    const { getPublicRepoInfo, getPublicHeadCommitSha, downloadPublicZipball } = await import('../github/publicGitHub');
+    const { getPublicRepoInfo, getPublicHeadCommitSha, downloadPublicZipball } = await import('../github/publicGitHub.js');
 
     const repoInfo = await getPublicRepoInfo(githubOwner, githubRepo);
     if (!repoInfo) {

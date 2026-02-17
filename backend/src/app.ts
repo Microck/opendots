@@ -1,11 +1,12 @@
 import Fastify from 'fastify';
 
-import { fastifyAuthRoute } from './auth/fastifyAuthRoute';
-import { healthRoute } from './routes/health';
-import { sessionRoute } from './routes/session';
-import { publisherBundlesRoute } from './routes/publisherBundles';
-import { publicBundlesRoute } from './routes/publicBundles';
-import { publishClaimRoute } from './routes/publishClaim';
+import { fastifyAuthRoute } from './auth/fastifyAuthRoute.js';
+import { ensureDatabaseMigrated } from './db/db.js';
+import { healthRoute } from './routes/health.js';
+import { sessionRoute } from './routes/session.js';
+import { publisherBundlesRoute } from './routes/publisherBundles.js';
+import { publicBundlesRoute } from './routes/publicBundles.js';
+import { publishClaimRoute } from './routes/publishClaim.js';
 
 function buildAllowedOrigins() {
   const fromEnv = process.env.CORS_ALLOWED_ORIGINS
@@ -24,6 +25,8 @@ function buildAllowedOrigins() {
 }
 
 export async function buildServer() {
+  await ensureDatabaseMigrated();
+
   const server = Fastify({ logger: true });
   const allowedOrigins = buildAllowedOrigins();
 

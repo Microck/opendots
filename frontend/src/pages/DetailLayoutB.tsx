@@ -53,6 +53,7 @@ interface OverviewItem {
   id: string
   name: string
   summary: string
+  href?: string
 }
 
 interface OverviewSection {
@@ -181,6 +182,57 @@ function parseOverviewSections(sectionContent: string): OverviewSection[] {
   const sections: OverviewSection[] = []
   let currentSection: OverviewSection | null = null
 
+  const parseItemLine = (rawLine: string): { reference: string; summary: string; href?: string } | null => {
+    const trimmed = rawLine.trim()
+    if (!trimmed.startsWith('- ')) {
+      return null
+    }
+
+    // Remove leading "- "
+    const content = trimmed.slice(2).trim()
+    if (!content) {
+      return null
+    }
+
+    // Split "<ref> - <summary>" on the first separator.
+    let refPart = content
+    let summary = ''
+    const sepIndex = content.indexOf(' - ')
+    if (sepIndex >= 0) {
+      refPart = content.slice(0, sepIndex).trim()
+      summary = content.slice(sepIndex + 3).trim()
+    }
+
+    if (!refPart) {
+      return null
+    }
+
+    // Strip surrounding backticks.
+    if (refPart.startsWith('`') && refPart.endsWith('`') && refPart.length > 1) {
+      refPart = refPart.slice(1, -1).trim()
+    }
+
+    // Parse markdown link syntax: [text](url)
+    const linkMatch = refPart.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (linkMatch) {
+      const label = linkMatch[1]?.trim() ?? ''
+      const href = linkMatch[2]?.trim() ?? ''
+      if (!label) {
+        return null
+      }
+      return {
+        reference: label,
+        summary,
+        href: href || undefined,
+      }
+    }
+
+    return {
+      reference: refPart,
+      summary,
+    }
+  }
+
   for (const line of lines) {
     const sectionMatch = line.match(/^\s*-\s+\*\*(.+?)\*\*/)
     if (sectionMatch) {
@@ -198,22 +250,17 @@ function parseOverviewSections(sectionContent: string): OverviewSection[] {
       continue
     }
 
-    const itemMatch = line.match(/^\s*-\s+(?:`([^`]+)`|([^`-][^-]*?))(?:\s*-\s*(.+))?$/)
-    if (!itemMatch) {
+    const parsed = parseItemLine(line)
+    if (!parsed) {
       continue
     }
 
-    const rawReference = (itemMatch[1] ?? itemMatch[2] ?? '').trim()
-    const summary = itemMatch[3]?.trim() ?? ''
-    if (!rawReference) {
-      continue
-    }
-
-    const name = normalizeArtifactName(rawReference)
+    const name = normalizeArtifactName(parsed.reference)
     currentSection.items.push({
-      id: `${currentSection.id}:${rawReference}:${currentSection.items.length}`,
+      id: `${currentSection.id}:${parsed.reference}:${currentSection.items.length}`,
       name,
-      summary,
+      summary: parsed.summary,
+      href: parsed.href,
     })
   }
 
@@ -804,7 +851,15 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                                     <ul className={styles.overviewList}>
                                       {visibleItems.map((item) => (
                                     <li key={item.id} className={styles.overviewListItem}>
-                                      <div className={styles.overviewItemName}>{item.name}</div>
+                                      <div className={styles.overviewItemName}>
+                                        {item.href ? (
+                                          <a href={item.href} target="_blank" rel="noopener noreferrer">
+                                            {item.name}
+                                          </a>
+                                        ) : (
+                                          item.name
+                                        )}
+                                      </div>
                                       {item.summary ? (
                                         <p className={styles.overviewItemSummary}>{item.summary}</p>
                                       ) : null}

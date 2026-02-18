@@ -985,6 +985,8 @@ Create `mcp.descriptions.json` in the repo root. Values can be either:
 - a string (description only)
 - an object with `description` and optional `source` (preferred)
 
+Important: do NOT embed "Source: <url>" inside the description. Put the URL in `source`.
+
 ```json
 {
   "discord-py-self": {
@@ -1340,6 +1342,28 @@ def plugin_registry_info(path: Path) -> tuple[int, list[str]]:
 def is_plugin_registry_file(path: Path) -> bool:
   return path.name.lower() in {'marketplace.json', 'marketplace.jsonc'}
 
+def extract_source_hint(text: str) -> tuple[str, str]:
+  """Extract a trailing or inline `Source: <url>` hint.
+
+  Returns (cleaned_text, source_url).
+  """
+  if not text:
+    return ('', '')
+
+  # Common patterns:
+  # - "... Source: https://example.com"
+  # - "Source: https://example.com"
+  # - "... (Source: https://example.com)"
+  m = re.search(r'(?i)\bsource\s*:\s*(https?://\S+)', text)
+  if not m:
+    return (text.strip(), '')
+
+  url = m.group(1).rstrip(').,;')
+  cleaned = (text[:m.start()] + text[m.end():]).strip()
+  cleaned = re.sub(r'\(\s*\)$', '', cleaned).strip()
+  cleaned = re.sub(r'\s{2,}', ' ', cleaned).strip(' -')
+  return (cleaned, url)
+
 def load_mcp_description_overrides(repo: Path) -> dict[str, dict[str, str]]:
   """Optional overrides for MCP descriptions and source links.
 
@@ -1365,21 +1389,28 @@ def load_mcp_description_overrides(repo: Path) -> dict[str, dict[str, str]]:
       norm = normalize_name(k)
 
       if isinstance(v, str) and v.strip():
-        out[norm] = {
-          'description': compact_summary(v, 220),
+        cleaned, hinted = extract_source_hint(v)
+        entry: dict[str, str] = {
+          'description': compact_summary(cleaned, 220),
         }
+        if hinted:
+          entry['source'] = hinted
+        out[norm] = entry
         continue
 
       if isinstance(v, dict):
         desc = v.get('description') or v.get('summary') or v.get('purpose')
         if isinstance(desc, str) and desc.strip():
+          desc_cleaned, hinted = extract_source_hint(desc)
           entry: dict[str, str] = {
-            'description': compact_summary(desc, 220),
+            'description': compact_summary(desc_cleaned, 220),
           }
 
           src = v.get('source') or v.get('repo') or v.get('url')
           if isinstance(src, str) and src.strip():
             entry['source'] = src.strip()
+          elif hinted:
+            entry['source'] = hinted
 
           out[norm] = entry
         continue
@@ -1532,53 +1563,58 @@ def _package_name_from_url(url: str) -> str:
     return ''
   return ''
 
-def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str], overrides: dict[str, dict[str, str]]):
-  """Return (url, markdown) for an inferred source link.
+def is_safe_public_url(url: str) -> bool:
+  if not isinstance(url, str):
+    return False
+  u = url.strip()
+  if not u:
+    return False
+  if not _looks_like_url(u):
+    return False
+  # Avoid rendering placeholder URLs as clickable.
+  if '<redacted' in u.lower() or '{' in u or '}' in u:
+    return False
+  return True
 
-  Links are best-effort. Prefer explicit overrides and local sources when possible.
+def best_mcp_link_url(name: str, cfg: object, npm_cache: dict[str, str], overrides: dict[str, dict[str, str]]) -> str:
+  """Best-effort URL for the MCP name link.
+
+  Priority:
+  1) `mcp.descriptions.json` source override
+  2) npm package page / repo inferred from launcher
+  3) remote endpoint URL
+
+  If unsure, return empty string (no link).
   """
-  if not isinstance(cfg, dict):
-    return ('', '')
-
   normalized = normalize_name(name)
   override = overrides.get(normalized)
   if override:
     src = override.get('source')
-    if isinstance(src, str) and src.strip():
-      u = src.strip()
-      return (u, f'([source]({u}))')
+    if isinstance(src, str) and is_safe_public_url(src):
+      return src.strip()
+
+  if not isinstance(cfg, dict):
+    return ''
 
   cmd_parts = command_tokens(cfg.get('command'))
   args = cfg.get('args')
   arg_parts = [a.strip() for a in args if isinstance(a, str) and a.strip()] if isinstance(args, list) else []
   combined = cmd_parts[1:] + arg_parts
 
-  # Local wrapper/script path.
-  maybe_paths = [t for t in combined if isinstance(t, str) and (t.startswith('./') or t.startswith('/') or '/' in t)]
-  for p in maybe_paths:
-    p_clean = p[2:] if p.startswith('./') else p
-    candidate = (repo / p_clean).resolve() if not Path(p_clean).is_absolute() else Path(p_clean)
-    try:
-      if candidate.exists() and candidate.is_file() and repo in candidate.resolve().parents:
-        rel = candidate.relative_to(repo).as_posix()
-        return (f'./{rel}', f'([source](./{rel}))')
-    except Exception:
-      pass
-
-  # npm package.
   cmd = cmd_parts[0] if cmd_parts else ''
   cmd_base = Path(cmd).name.lower() if cmd else ''
   if cmd_base in {'npx', 'pnpm', 'bunx', 'yarn', 'npm'}:
     package_token = first_non_flag([t for t in combined if t not in {'exec', 'dlx', 'mcp'}])
     pkg_token = package_token.strip()
 
-    # Some MCPs use a registry tarball URL as the token; handle it explicitly.
+    pkg = ''
     if pkg_token and _looks_like_url(pkg_token):
       extracted = _package_name_from_url(pkg_token)
       if extracted:
         pkg = extracted
-      else:
-        return (pkg_token, f'([source]({pkg_token}))')
+      elif is_safe_public_url(pkg_token):
+        # No package name to resolve; link to the registry URL.
+        return pkg_token
     else:
       pkg = _npm_package_name_from_token(pkg_token)
 
@@ -1586,17 +1622,16 @@ def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str
     if pkg and '<redacted>' not in pkg.lower() and _looks_like_npm_name(pkg):
       npm_url = f'https://www.npmjs.com/package/{pkg}'
       repo_url = _npm_source_url_for_package(pkg, npm_cache)
-      if repo_url and repo_url.startswith('http') and repo_url != npm_url:
-        return (repo_url, f'([package]({npm_url})) ([repo]({repo_url}))')
-      return (npm_url, f'([package]({npm_url}))')
+      # Prefer a real VCS repo if we can resolve one.
+      if isinstance(repo_url, str) and repo_url.startswith('https://github.com/') and repo_url.count('/') >= 4:
+        return repo_url
+      return npm_url
 
-  # Remote endpoint fallback.
   url = cfg.get('url')
-  if isinstance(url, str) and url.strip():
-    u = url.strip()
-    return (u, f'([endpoint]({u}))')
+  if isinstance(url, str) and is_safe_public_url(url):
+    return url.strip()
 
-  return ('', '')
+  return ''
 
 def guess_mcp_summary(name: str, cfg: object, repo: Path, overrides: dict[str, dict[str, str]]) -> str:
   normalized = normalize_name(name)
@@ -1731,10 +1766,9 @@ def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
   for name in sorted(mcp.keys()):
     cfg = mcp.get(name)
     summary = guess_mcp_summary(name, cfg, repo, overrides)
-    url, link_md = mcp_source_link(name, cfg, repo, npm_cache, overrides)
-    if link_md and (not url or url not in summary):
-      summary = f'{summary} {link_md}'
-    rows.append((name, summary))
+    url = best_mcp_link_url(name, cfg, npm_cache, overrides)
+    display = f'[{name}]({url})' if url else f'`{name}`'
+    rows.append((display, summary))
 
   return rows
 
@@ -1776,8 +1810,8 @@ if not sections:
 mcp_entries = collect_mcp_entries(REPO)
 if mcp_entries:
   sections.append('- **MCP Servers**')
-  for name, summary in mcp_entries:
-    sections.append(f'  - `{name}` - {summary}')
+  for display, summary in mcp_entries:
+    sections.append(f'  - {display} - {summary}')
 
 if not README.exists():
   raise SystemExit('README.md not found. Run Step 4.5 first.')
@@ -1869,7 +1903,7 @@ if readme.exists():
     else:
       lines = [line.strip() for line in block.group(1).splitlines() if line.strip()]
       section_lines = [line for line in lines if line.startswith('- **')]
-      entry_lines = [line for line in lines if line.startswith('- `') or line.startswith('-') and '`' in line]
+      entry_lines = [line for line in lines if line.startswith('- ') and not line.startswith('- **')]
       if len(section_lines) < 2:
         errors.append('README overview needs at least 2 sections (skills/plugins/commands/etc).')
       if len(entry_lines) < 6:
@@ -1897,7 +1931,7 @@ if readme.exists():
           current_section = sec.group(1).strip()
           section_entries.setdefault(current_section, [])
           continue
-        if line.startswith('- `') and current_section:
+        if line.startswith('- ') and not line.startswith('- **') and current_section:
           section_entries.setdefault(current_section, []).append(line)
 
       mcp_lines = section_entries.get('MCP Servers', [])

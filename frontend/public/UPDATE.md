@@ -52,6 +52,7 @@ Current behavior:
 - Commands/Agents/Themes/Tools keep short, purpose-focused summaries.
 - MCP Servers keep purpose-focused summaries.
   - If any MCP entry is still generic, add an override in `mcp.descriptions.json` and re-run Step 4.6.
+  - MCP names are rendered as links when a `source` URL can be inferred or provided.
 
 Fetch and inspect Step 4.6 (avoid brittle line numbers):
 
@@ -65,6 +66,7 @@ Run the `python3 - <<'PY'` block from Step 4.6 in your repo root.
 If Step 4.6 produces any MCP line that asks you to "Add an entry to `mcp.descriptions.json`":
 
 1) Create/update `mcp.descriptions.json` in the repo root as a JSON object mapping MCP name -> description (and optional source).
+   - Do NOT embed "Source: <url>" inside the description. Put the URL in the `source` field.
 
 Format:
 

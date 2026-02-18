@@ -667,6 +667,17 @@
   margin-bottom: 4px;
 }
 
+.overviewItemName a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+  text-underline-offset: 2px;
+}
+
+.overviewItemName a:hover {
+  text-decoration-color: currentColor;
+}
+
 .overviewItemSummary {
   margin: 0;
   font-size: 0.78rem;

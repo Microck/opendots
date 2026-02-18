@@ -960,6 +960,7 @@ Important: this pass must read each source file in full before summarizing. Do n
 Coverage requirements for this step:
 
 - MCP entries must use server names (for example `kagi-search`) with purpose-focused summaries.
+- When a trustworthy source can be inferred, MCP entries should include a link to the official source (repo/package/endpoint).
 - Plugin registries like `plugins/**/marketplace.json` must NOT be treated as installed plugins.
   - Summarize registry files as registries (include entry count when possible).
   - Installed plugin artifacts are the files under `plugins/` or `.opencode/plugins/`.
@@ -995,6 +996,8 @@ from __future__ import annotations
 import json
 import re
 import shlex
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 REPO = Path('.').resolve()
@@ -1371,6 +1374,142 @@ def guess_capabilities_from_tokens(tokens: set[str]) -> str:
     return 'Search files using patterns/regex and return matches with context for codebase exploration.'
   return ''
 
+def _normalize_repo_url(url: str) -> str:
+  u = url.strip()
+  u = re.sub(r'^git\+', '', u)
+  u = re.sub(r'^git://', 'https://', u)
+  u = u.replace('git@github.com:', 'https://github.com/')
+  u = re.sub(r'\.git$', '', u)
+  return u
+
+def _http_get_json(url: str, timeout_s: float = 2.5):
+  try:
+    req = urllib.request.Request(
+      url,
+      headers={
+        'User-Agent': 'opendots-readme-generator',
+        'Accept': 'application/json',
+      },
+    )
+    with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+      raw = resp.read()
+    return json.loads(raw.decode('utf-8', errors='replace'))
+  except Exception:
+    return None
+
+def _npm_package_name_from_token(token: str) -> str:
+  """Extract npm package name from tokens like:
+  - @scope/pkg
+  - @scope/pkg@latest
+  - pkg@1.2.3
+  """
+  t = token.strip()
+  if not t:
+    return ''
+
+  # Preserve scoped package prefix.
+  if t.startswith('@'):
+    # Split on the last '@' (version separator) only if there are 2+ '@' symbols.
+    if t.count('@') >= 2:
+      return t.rsplit('@', 1)[0]
+    return t
+
+  # Unscoped: split version suffix.
+  if '@' in t:
+    return t.split('@', 1)[0]
+  return t
+
+def _npm_source_url_for_package(package_name: str, cache: dict[str, str]) -> str:
+  if not package_name:
+    return ''
+
+  if package_name in cache:
+    return cache[package_name]
+
+  # Always have a deterministic fallback.
+  fallback = f'https://www.npmjs.com/package/{package_name}'
+
+  # Try to resolve to upstream repo via the npm registry.
+  pkg_enc = urllib.parse.quote(package_name, safe='@')
+  registry_url = f'https://registry.npmjs.org/{pkg_enc}'
+  data = _http_get_json(registry_url)
+  if not isinstance(data, dict):
+    cache[package_name] = fallback
+    return fallback
+
+  repo_url = ''
+  latest = None
+  dist_tags = data.get('dist-tags')
+  if isinstance(dist_tags, dict):
+    latest = dist_tags.get('latest')
+
+  version_obj = None
+  versions = data.get('versions')
+  if isinstance(versions, dict) and isinstance(latest, str):
+    version_obj = versions.get(latest)
+
+  def pick_repo(obj: object) -> str:
+    if not isinstance(obj, dict):
+      return ''
+    repo = obj.get('repository')
+    if isinstance(repo, dict):
+      u = repo.get('url')
+      if isinstance(u, str) and u.strip():
+        return _normalize_repo_url(u)
+    if isinstance(repo, str) and repo.strip():
+      return _normalize_repo_url(repo)
+    homepage = obj.get('homepage')
+    if isinstance(homepage, str) and homepage.strip():
+      return homepage.strip()
+    return ''
+
+  repo_url = pick_repo(version_obj) or pick_repo(data)
+  cache[package_name] = repo_url or fallback
+  return cache[package_name]
+
+def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str]) -> str:
+  """Return a single markdown link string, e.g. "([source](...))".
+
+  Links are best-effort. Prefer local sources when possible.
+  """
+  if not isinstance(cfg, dict):
+    return ''
+
+  cmd_parts = command_tokens(cfg.get('command'))
+  args = cfg.get('args')
+  arg_parts = [a.strip() for a in args if isinstance(a, str) and a.strip()] if isinstance(args, list) else []
+  combined = cmd_parts[1:] + arg_parts
+
+  # Local wrapper/script path.
+  maybe_paths = [t for t in combined if isinstance(t, str) and (t.startswith('./') or t.startswith('/') or '/' in t)]
+  for p in maybe_paths:
+    p_clean = p[2:] if p.startswith('./') else p
+    candidate = (repo / p_clean).resolve() if not Path(p_clean).is_absolute() else Path(p_clean)
+    try:
+      if candidate.exists() and candidate.is_file() and repo in candidate.resolve().parents:
+        rel = candidate.relative_to(repo).as_posix()
+        return f'([source](./{rel}))'
+    except Exception:
+      pass
+
+  # npm package.
+  cmd = cmd_parts[0] if cmd_parts else ''
+  cmd_base = Path(cmd).name.lower() if cmd else ''
+  if cmd_base in {'npx', 'pnpm', 'bunx', 'yarn', 'npm'}:
+    package_token = first_non_flag([t for t in combined if t not in {'exec', 'dlx', 'mcp'}])
+    pkg = _npm_package_name_from_token(package_token)
+    if pkg and '<redacted>' not in pkg.lower():
+      src = _npm_source_url_for_package(pkg, npm_cache)
+      return f'([source]({src}))'
+
+  # Remote endpoint fallback.
+  url = cfg.get('url')
+  if isinstance(url, str) and url.strip():
+    u = url.strip()
+    return f'([endpoint]({u}))'
+
+  return ''
+
 def guess_mcp_summary(name: str, cfg: object, repo: Path, overrides: dict[str, str]) -> str:
   normalized = normalize_name(name)
   override = overrides.get(normalized)
@@ -1409,7 +1548,8 @@ def guess_mcp_summary(name: str, cfg: object, repo: Path, overrides: dict[str, s
       # If the command references a local file inside this repo, summarize that file.
       maybe_paths = [t for t in combined if isinstance(t, str) and (t.startswith('./') or t.startswith('/') or '/' in t)]
       for p in maybe_paths:
-        candidate = (repo / p).resolve() if p.startswith('./') else Path(p)
+        p_clean = p[2:] if p.startswith('./') else p
+        candidate = (repo / p_clean).resolve() if not Path(p_clean).is_absolute() else Path(p_clean)
         try:
           if candidate.exists() and candidate.is_file() and repo in candidate.resolve().parents:
             summary = file_summary(candidate)
@@ -1482,6 +1622,7 @@ def collect_entries_for_file(label: str, rel: str, file_path: Path) -> list[tupl
 
 def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
   overrides = load_mcp_description_overrides(repo)
+  npm_cache: dict[str, str] = {}
   config_path = repo / 'opencode.public.json'
   if not config_path.exists() or not config_path.is_file():
     return []
@@ -1500,7 +1641,12 @@ def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
 
   rows: list[tuple[str, str]] = []
   for name in sorted(mcp.keys()):
-    rows.append((name, guess_mcp_summary(name, mcp.get(name), repo, overrides)))
+    cfg = mcp.get(name)
+    summary = guess_mcp_summary(name, cfg, repo, overrides)
+    link = mcp_source_link(name, cfg, repo, npm_cache)
+    if link:
+      summary = f'{summary} {link}'
+    rows.append((name, summary))
 
   return rows
 

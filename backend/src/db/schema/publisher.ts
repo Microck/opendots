@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import { user } from './auth';
+import { user } from './auth.js';
 
 export const publisherBundle = sqliteTable(
   'publisher_bundle',

@@ -915,9 +915,20 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           );
           const updatedAtMs = new Date(updatedAt).getTime();
 
-          const shareCode = typeof bundle.shareCode === 'string' && isShortShareCode(bundle.shareCode)
-            ? bundle.shareCode
-            : (await ensureBundleShareCode(bundle.id)) ?? toBundleShareCode(bundle.id);
+          let shareCode = toBundleShareCode(bundle.id);
+          if (typeof bundle.shareCode === 'string' && isShortShareCode(bundle.shareCode)) {
+            shareCode = bundle.shareCode;
+          } else {
+            try {
+              const ensured = await ensureBundleShareCode(bundle.id);
+              if (ensured && isShortShareCode(ensured)) {
+                shareCode = ensured;
+              }
+            } catch (error) {
+              // Best-effort backfill only; never block listing bundles.
+              console.warn('Failed to ensure share code (list):', error);
+            }
+          }
 
           const resolvedAccentColor = cardTheme
             ? (bundle.accentColor ?? cardTheme?.border ?? getDeterministicAccent(bundle.id))
@@ -1000,7 +1011,15 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
     const normalized = code.trim();
 
     if (isShortShareCode(normalized)) {
-      return await resolveBundleIdFromShortShareCode(normalized);
+      try {
+        const resolved = await resolveBundleIdFromShortShareCode(normalized);
+        if (resolved) {
+          return resolved;
+        }
+      } catch (error) {
+        // Don't block legacy resolutions if the short-code lookup fails.
+        console.warn('Failed to resolve short share code:', error);
+      }
     }
 
     const decodedBundleId = bundleIdFromShareCode(normalized);
@@ -1183,9 +1202,20 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const bundleData = bundle[0];
 
-      const shareCode = typeof bundleData.shareCode === 'string' && isShortShareCode(bundleData.shareCode)
-        ? bundleData.shareCode
-        : (await ensureBundleShareCode(bundleData.id)) ?? toBundleShareCode(bundleData.id);
+      let shareCode = toBundleShareCode(bundleData.id);
+      if (typeof bundleData.shareCode === 'string' && isShortShareCode(bundleData.shareCode)) {
+        shareCode = bundleData.shareCode;
+      } else {
+        try {
+          const ensured = await ensureBundleShareCode(bundleData.id);
+          if (ensured && isShortShareCode(ensured)) {
+            shareCode = ensured;
+          }
+        } catch (error) {
+          // Best-effort backfill only; never block bundle detail.
+          console.warn('Failed to ensure share code (detail):', error);
+        }
+      }
 
       // Get most recent snapshots for diff/change summary.
       const recentSnapshots = await db.select({

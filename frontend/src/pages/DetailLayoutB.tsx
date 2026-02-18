@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   FolderSimple,
@@ -36,10 +36,108 @@ import { apiUrl } from '../lib/apiBase'
 import { siteUrl } from '../lib/siteBase'
 import useReactiveSurfaceVars from '../hooks/useReactiveSurfaceVars'
 
+const CodeContentRenderer = lazy(() => import('../components/CodeContentRenderer'))
+const OVERVIEW_MARKER_START = '<!-- OPENDOTS_AUTO_CONTENTS_START -->'
+const OVERVIEW_MARKER_END = '<!-- OPENDOTS_AUTO_CONTENTS_END -->'
+
+type OverviewTab = 'overview' | 'files'
+
+function pickReadmePath(files: DetailLayoutProps['bundle']['fileIndex']): string | null {
+  const normalized = files.map((file) => ({
+    path: file.path,
+    lowerPath: file.path.toLowerCase(),
+  }))
+
+  const exactRoot = normalized.find((file) => file.lowerPath === 'readme.md')
+  if (exactRoot) {
+    return exactRoot.path
+  }
+
+  const nestedReadmes = normalized
+    .filter((file) => file.lowerPath.endsWith('/readme.md'))
+    .sort((a, b) => a.path.length - b.path.length)
+
+  return nestedReadmes[0]?.path ?? null
+}
+
+function extractOverviewMarkdown(readmeContent: string): string | null {
+  const markerStart = readmeContent.indexOf(OVERVIEW_MARKER_START)
+  const markerEnd = readmeContent.indexOf(OVERVIEW_MARKER_END)
+  if (markerStart >= 0 && markerEnd > markerStart) {
+    const section = readmeContent
+      .slice(markerStart + OVERVIEW_MARKER_START.length, markerEnd)
+      .trim()
+
+    if (section.length > 0) {
+      return `## Overview\n\n${section}`
+    }
+  }
+
+  const contentsMatch = readmeContent.match(/(?:^|\n)##\s+Contents\s*\n([\s\S]*?)(?:\n##\s+|\n#\s+|$)/i)
+  if (contentsMatch?.[1]?.trim()) {
+    return `## Contents\n\n${contentsMatch[1].trim()}`
+  }
+
+  return null
+}
+
+function buildFallbackOverview(files: DetailLayoutProps['bundle']['fileIndex']): string {
+  const labels: Record<DetailLayoutProps['bundle']['fileIndex'][number]['kind'], string> = {
+    config: 'Configuration',
+    theme: 'Themes',
+    skill: 'Skills',
+    agent: 'Agents',
+    command: 'Commands',
+    plugin: 'Plugins',
+    tool: 'Tools',
+    prompt: 'Prompts',
+    mode: 'Modes',
+    rules: 'Rules',
+    script: 'Scripts',
+    other: 'Other files',
+  }
+
+  const filesByKind = new Map<string, string[]>()
+  for (const file of files) {
+    const label = labels[file.kind] ?? labels.other
+    const current = filesByKind.get(label) ?? []
+    current.push(file.path)
+    filesByKind.set(label, current)
+  }
+
+  const orderedKinds = Array.from(filesByKind.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+
+  const lines = orderedKinds.flatMap(([label, paths]) => {
+    const sortedPaths = [...paths].sort((a, b) => a.localeCompare(b))
+    const topPaths = sortedPaths.slice(0, 8).map((path) => `  - \`${path}\``)
+    const remaining = sortedPaths.length - topPaths.length
+    if (remaining > 0) {
+      topPaths.push(`  - ...and ${remaining} more`) 
+    }
+
+    return [`- **${label}** (${sortedPaths.length})`, ...topPaths]
+  })
+
+  return [
+    '## Bundle Overview',
+    '',
+    'This bundle does not expose an auto-generated README overview block yet.',
+    'Below is a fallback inventory grouped by artifact type:',
+    '',
+    ...lines,
+  ].join('\n')
+}
+
 export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLayoutProps) {
   const [showValidation, setShowValidation] = useState(false)
   const [showSecrets, setShowSecrets] = useState(false)
   const [installPromptCopied, setInstallPromptCopied] = useState(false)
+  const [shareLinkCopied, setShareLinkCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState<OverviewTab>('overview')
+  const [overviewMarkdown, setOverviewMarkdown] = useState<string>('')
+  const [overviewLoading, setOverviewLoading] = useState(false)
+  const [overviewError, setOverviewError] = useState<string | null>(null)
 
   const v = (variants: import('motion/react').Variants) =>
     prefersReducedMotion ? undefined : variants
@@ -58,8 +156,9 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
   const themedStyle = buildThemedStyle(bundle)
   const author = bundle.owner || bundle.githubFullName.split('/')[0]
   const avatarUrl = bundle.ownerAvatarUrl || `https://github.com/${author}.png`
-  const bundleUrl = siteUrl(`/bundle/${bundle.id}`)
+  const bundleUrl = siteUrl(`/${bundle.shareCode || bundle.id}`)
   const installPrompt = `Fetch and follow ${siteUrl('/INSTALL.md')} for bundle URL: ${bundleUrl}`
+  const overviewReadmePath = useMemo(() => pickReadmePath(bundle.fileIndex), [bundle.fileIndex])
   const heroSurfaceRef = useReactiveSurfaceVars<HTMLDivElement>(!prefersReducedMotion, {
     shiftX: 20,
     shiftY: 14,
@@ -79,6 +178,80 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
       setInstallPromptCopied(false)
     }
   }
+
+  const handleCopyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(bundleUrl)
+      setShareLinkCopied(true)
+      window.setTimeout(() => setShareLinkCopied(false), 1800)
+    } catch {
+      setShareLinkCopied(false)
+    }
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    const abortController = new AbortController()
+
+    const loadOverview = async () => {
+      if (!overviewReadmePath) {
+        setOverviewMarkdown(buildFallbackOverview(bundle.fileIndex))
+        setOverviewError(null)
+        return
+      }
+
+      setOverviewLoading(true)
+      setOverviewError(null)
+
+      try {
+        const response = await fetch(
+          apiUrl(`/api/bundles/${bundle.id}/file?path=${encodeURIComponent(overviewReadmePath)}`),
+          { signal: abortController.signal },
+        )
+
+        if (!response.ok) {
+          throw new Error('Failed to load README overview')
+        }
+
+        const readmeContent = await response.text()
+        if (cancelled) {
+          return
+        }
+
+        const extracted = extractOverviewMarkdown(readmeContent)
+        if (extracted) {
+          setOverviewMarkdown(extracted)
+          setOverviewError(null)
+          return
+        }
+
+        setOverviewMarkdown(buildFallbackOverview(bundle.fileIndex))
+        setOverviewError(null)
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return
+        }
+
+        if (cancelled) {
+          return
+        }
+
+        setOverviewMarkdown(buildFallbackOverview(bundle.fileIndex))
+        setOverviewError('Unable to read bundle README overview. Showing fallback inventory.')
+      } finally {
+        if (!cancelled) {
+          setOverviewLoading(false)
+        }
+      }
+    }
+
+    void loadOverview()
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+    }
+  }, [bundle.fileIndex, bundle.id, overviewReadmePath])
 
   return (
     <div className={styles.page} style={themedStyle}>
@@ -276,12 +449,59 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
               viewport={scrollViewports.once}
             >
               <div className={styles.explorerHeader}>
-                <span className="text-label">BUNDLE CONTENTS</span>
+                <div className={styles.explorerTabs} role="tablist" aria-label="Bundle panel tabs">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'overview'}
+                    className={`${styles.explorerTab} ${activeTab === 'overview' ? styles.explorerTabActive : ''}`}
+                    onClick={() => setActiveTab('overview')}
+                  >
+                    Overview
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === 'files'}
+                    className={`${styles.explorerTab} ${activeTab === 'files' ? styles.explorerTabActive : ''}`}
+                    onClick={() => setActiveTab('files')}
+                  >
+                    Files
+                  </button>
+                </div>
                 <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                  {bundle.fileIndex.length} files &middot; {bundle.latestSnapshot ? formatSize(bundle.latestSnapshot.byteSize) : 'Unknown'}
+                  {activeTab === 'files'
+                    ? `${bundle.fileIndex.length} files`
+                    : overviewReadmePath
+                      ? `source: ${overviewReadmePath}`
+                      : 'source: generated fallback'}
+                  {' '} &middot; {' '}
+                  {bundle.latestSnapshot ? formatSize(bundle.latestSnapshot.byteSize) : 'Unknown'}
                 </span>
               </div>
-              <CodeExplorer bundleId={bundle.id} files={bundle.fileIndex} />
+
+              {activeTab === 'overview' ? (
+                <div className={styles.overviewPanel} role="tabpanel" aria-label="Bundle overview">
+                  {overviewLoading ? (
+                    <div className={styles.overviewState}>Loading overview...</div>
+                  ) : (
+                    <>
+                      {overviewError && <div className={styles.overviewWarning}>{overviewError}</div>}
+                      <Suspense fallback={<div className={styles.overviewState}>Rendering overview...</div>}>
+                        <CodeContentRenderer
+                          content={overviewMarkdown}
+                          isMarkdown={true}
+                          language="markdown"
+                        />
+                      </Suspense>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div role="tabpanel" aria-label="Bundle files">
+                  <CodeExplorer bundleId={bundle.id} files={bundle.fileIndex} />
+                </div>
+              )}
             </motion.section>
 
             {/* Import footer */}
@@ -390,6 +610,23 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
 
             {/* Links card */}
             <motion.div className={styles.sideCard} variants={v(cardEntrance)}>
+              <div className={styles.aiInstallCard}>
+                <p className={styles.aiInstallLabel}>Share Link</p>
+                <p className={styles.aiInstallText}>
+                  Use this short URL for social posts and direct sharing.
+                </p>
+                <ClickSpark sparkColor="rgba(255,255,255,0.9)" sparkSize={9} sparkRadius={11}>
+                  <button
+                    type="button"
+                    className={styles.aiInstallCopyButton}
+                    onClick={() => void handleCopyShareLink()}
+                  >
+                    <CopySimple size={14} weight="bold" aria-hidden />
+                    {shareLinkCopied ? 'LINK COPIED' : 'COPY SHARE LINK'}
+                  </button>
+                </ClickSpark>
+              </div>
+              <div className={styles.installDivider} />
               <a
                 href={bundle.repoUrl}
                 target="_blank"

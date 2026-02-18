@@ -23,12 +23,26 @@
       "source": "/Install.md",
       "destination": "/INSTALL.md",
       "permanent": true
+    },
+    {
+      "source": "/update.md",
+      "destination": "/UPDATE.md",
+      "permanent": true
+    },
+    {
+      "source": "/Update.md",
+      "destination": "/UPDATE.md",
+      "permanent": true
     }
   ],
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api?path=$1"
+      "destination": "/api?__opendots_path=$1"
+    },
+    {
+      "source": "/:shareCode([0-9A-Za-z]{20,22})",
+      "destination": "/api?__opendots_path=share/:shareCode/redirect"
     },
     {
       "source": "/((?!api).*)",

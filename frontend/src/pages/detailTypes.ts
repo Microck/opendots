@@ -35,6 +35,7 @@ export interface SafetyResults {
 
 export interface BundleData {
   id: string
+  shareCode: string
   name: string
   summary: string
   description: string

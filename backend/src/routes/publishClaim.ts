@@ -12,6 +12,7 @@ import { verifyTurnstileToken } from '../security/turnstile.js';
 
 const REPO_NAME_REGEX = /^[a-zA-Z0-9._-]{1,100}$/;
 const CLAIM_TTL_MS = 30 * 60 * 1000;
+const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 function getAppBaseUrl() {
   const base = process.env.APP_BASE_URL?.trim();
@@ -19,6 +20,81 @@ function getAppBaseUrl() {
     return 'https://opendots.me';
   }
   return base.replace(/\/+$/, '');
+}
+
+function toBundleSharePath(bundleId: string): string {
+  const normalizedHex = bundleId.trim().toLowerCase().replace(/-/g, '');
+  if (!/^[0-9a-f]{32}$/.test(normalizedHex)) {
+    return `/bundle/${bundleId}`;
+  }
+
+  let value = BigInt(`0x${normalizedHex}`);
+  if (value === 0n) {
+    return '/0';
+  }
+
+  let code = '';
+  while (value > 0n) {
+    const remainder = Number(value % 62n);
+    code = `${BASE62_ALPHABET[remainder]}${code}`;
+    value /= 62n;
+  }
+
+  return `/${code}`;
+}
+
+function toTimestampMs(value: unknown): number | null {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value >= 1_000_000_000_000 ? value : value * 1000;
+  }
+
+  if (typeof value === 'string') {
+    const parsedDate = Date.parse(value);
+    if (!Number.isNaN(parsedDate)) {
+      return parsedDate;
+    }
+
+    const parsedNumber = Number(value);
+    if (Number.isFinite(parsedNumber)) {
+      return parsedNumber >= 1_000_000_000_000 ? parsedNumber : parsedNumber * 1000;
+    }
+  }
+
+  return null;
+}
+
+function mapGitHubError(error: unknown): { statusCode: number; code: string; message: string } | null {
+  const status = Number((error as { status?: unknown })?.status);
+  if (!Number.isFinite(status)) {
+    return null;
+  }
+
+  if (status === 401 || status === 403 || status === 429) {
+    return {
+      statusCode: 503,
+      code: 'GITHUB_RATE_LIMITED',
+      message: 'GitHub is rate-limiting requests right now. Please retry shortly.',
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      statusCode: 503,
+      code: 'GITHUB_UNAVAILABLE',
+      message: 'GitHub is temporarily unavailable. Please retry shortly.',
+    };
+  }
+
+  return {
+    statusCode: 502,
+    code: 'GITHUB_FETCH_FAILED',
+    message: 'Failed to fetch repository data from GitHub. Please retry.',
+  };
 }
 
 function isUniqueConstraintError(error: unknown): boolean {
@@ -136,7 +212,18 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         return { code: 'INVALID_REPO_NAME', message: 'Invalid repository name' };
       }
 
-      const repoInfo = await getPublicRepoInfo(parsed.owner, parsed.repo);
+      let repoInfo: Awaited<ReturnType<typeof getPublicRepoInfo>>;
+      try {
+        repoInfo = await getPublicRepoInfo(parsed.owner, parsed.repo);
+      } catch (error) {
+        const mapped = mapGitHubError(error);
+        if (mapped) {
+          reply.code(mapped.statusCode);
+          return { code: mapped.code, message: mapped.message };
+        }
+        throw error;
+      }
+
       if (!repoInfo) {
         reply.code(404);
         return { code: 'REPO_NOT_FOUND', message: 'Repository not found on GitHub' };
@@ -160,13 +247,17 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         .orderBy(desc(publishClaim.createdAt))
         .limit(5);
 
-      const reusable = existing.find((c) => c.expiresAt.getTime() > now);
+      const reusable = existing.find((c) => {
+        const expiresAtMs = toTimestampMs(c.expiresAt);
+        return expiresAtMs !== null && expiresAtMs > now;
+      });
       if (reusable) {
+        const reusableExpiresAtMs = toTimestampMs(reusable.expiresAt);
         return {
           repoFullName: reusable.repoFullName,
           claimCode: reusable.claimCode,
           claimFilePath: reusable.claimFilePath,
-          expiresAt: reusable.expiresAt,
+          expiresAt: new Date(reusableExpiresAtMs ?? now + CLAIM_TTL_MS).toISOString(),
         };
       }
 
@@ -198,7 +289,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         repoFullName: repoInfo.full_name,
         claimCode,
         claimFilePath: 'opendots-claim.txt',
-        expiresAt,
+        expiresAt: expiresAt.toISOString(),
       };
     } catch (error: any) {
       console.error('Claim start error:', error);
@@ -249,7 +340,18 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         return { code: 'RATE_LIMITED', message: 'Too many publish attempts for this repository. Please try again later.' };
       }
 
-      const repoInfo = await getPublicRepoInfo(parsed.owner, parsed.repo);
+      let repoInfo: Awaited<ReturnType<typeof getPublicRepoInfo>>;
+      try {
+        repoInfo = await getPublicRepoInfo(parsed.owner, parsed.repo);
+      } catch (error) {
+        const mapped = mapGitHubError(error);
+        if (mapped) {
+          reply.code(mapped.statusCode);
+          return { code: mapped.code, message: mapped.message };
+        }
+        throw error;
+      }
+
       if (!repoInfo) {
         reply.code(404);
         return { code: 'REPO_NOT_FOUND', message: 'Repository not found on GitHub' };
@@ -277,7 +379,8 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         return { code: 'CLAIM_INVALID', message: 'Invalid claim code for this repository' };
       }
 
-      if (claim.expiresAt.getTime() <= Date.now()) {
+      const expiresAtMs = toTimestampMs(claim.expiresAt);
+      if (expiresAtMs === null || expiresAtMs <= Date.now()) {
         await db.update(publishClaim)
           .set({ status: 'expired' })
           .where(eq(publishClaim.id, claim.id));
@@ -289,12 +392,22 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
       const defaultBranch = repoInfo.default_branch || 'main';
 
       // Verify claim file content.
-      const claimContent = await getPublicFileContent({
-        owner: parsed.owner,
-        repo: parsed.repo,
-        ref: defaultBranch,
-        path: claim.claimFilePath,
-      });
+      let claimContent;
+      try {
+        claimContent = await getPublicFileContent({
+          owner: parsed.owner,
+          repo: parsed.repo,
+          ref: defaultBranch,
+          path: claim.claimFilePath,
+        });
+      } catch (error) {
+        const mapped = mapGitHubError(error);
+        if (mapped) {
+          reply.code(mapped.statusCode);
+          return { code: mapped.code, message: mapped.message };
+        }
+        throw error;
+      }
 
       if (!claimContent || claimContent.trim() !== claimCode) {
         reply.code(400);
@@ -320,7 +433,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         return {
           alreadyRegistered: true,
           bundleId: existingBundle.id,
-          bundleUrl: `${appBaseUrl}/bundle/${existingBundle.id}`,
+          bundleUrl: `${appBaseUrl}${toBundleSharePath(existingBundle.id)}`,
           importResult,
         };
       }
@@ -389,7 +502,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         return {
           alreadyRegistered: true,
           bundleId: concurrentBundle.id,
-          bundleUrl: `${appBaseUrl}/bundle/${concurrentBundle.id}`,
+          bundleUrl: `${appBaseUrl}${toBundleSharePath(concurrentBundle.id)}`,
           importResult,
         };
       }
@@ -407,7 +520,7 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
       return {
         alreadyRegistered: false,
         bundleId,
-        bundleUrl: `${appBaseUrl}/bundle/${bundleId}`,
+        bundleUrl: `${appBaseUrl}${toBundleSharePath(bundleId)}`,
         importResult,
         nextStep: 'Sign in with GitHub to claim and manage this bundle in your dashboard.',
       };

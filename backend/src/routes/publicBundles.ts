@@ -10,6 +10,7 @@ import { parse as parseJsonc } from 'comment-json';
 import { materializeSnapshotToLocal } from '../storage/snapshots.js';
 
 const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
+const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 interface BundleListQuery {
   q?: string;
@@ -22,6 +23,7 @@ interface BundleListQuery {
 
 interface BundleCardResponse {
   id: string;
+  shareCode: string;
   slug: string;
   name: string;
   summary: string;
@@ -35,6 +37,71 @@ interface BundleCardResponse {
   stars: number;
   forks: number;
   updatedAt: string;
+}
+
+function encodeHexToBase62(hex: string): string {
+  let value = BigInt(`0x${hex}`);
+  if (value === 0n) {
+    return '0';
+  }
+
+  let out = '';
+  while (value > 0n) {
+    const remainder = Number(value % 62n);
+    out = `${BASE62_ALPHABET[remainder]}${out}`;
+    value /= 62n;
+  }
+
+  return out;
+}
+
+function decodeBase62ToHex(base62: string): string | null {
+  let value = 0n;
+  for (const character of base62) {
+    const index = BASE62_ALPHABET.indexOf(character);
+    if (index < 0) {
+      return null;
+    }
+    value = (value * 62n) + BigInt(index);
+  }
+
+  return value.toString(16);
+}
+
+function normalizeUuidHex(uuid: string): string | null {
+  const normalized = uuid.trim().toLowerCase().replace(/-/g, '');
+  if (!/^[0-9a-f]{32}$/.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
+function toUuidStringFromHex(hex: string): string {
+  const normalized = hex.padStart(32, '0').toLowerCase();
+  return `${normalized.slice(0, 8)}-${normalized.slice(8, 12)}-${normalized.slice(12, 16)}-${normalized.slice(16, 20)}-${normalized.slice(20, 32)}`;
+}
+
+function toBundleShareCode(bundleId: string): string {
+  const normalizedHex = normalizeUuidHex(bundleId);
+  if (!normalizedHex) {
+    return bundleId;
+  }
+
+  return encodeHexToBase62(normalizedHex);
+}
+
+function bundleIdFromShareCode(code: string): string | null {
+  const normalizedCode = code.trim();
+  if (!/^[0-9A-Za-z]+$/.test(normalizedCode)) {
+    return null;
+  }
+
+  const decodedHex = decodeBase62ToHex(normalizedCode);
+  if (!decodedHex || decodedHex.length > 32) {
+    return null;
+  }
+
+  return toUuidStringFromHex(decodedHex);
 }
 
 interface BundleCardTheme {
@@ -227,6 +294,63 @@ function normalizeHexColor(color: unknown): string | null {
   return `#${hex}`;
 }
 
+function resolveThemeColorToken(theme: Record<string, unknown>, value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const directHex = normalizeHexColor(value);
+  if (directHex) {
+    return directHex;
+  }
+
+  const defs = theme.defs;
+  if (!defs || typeof defs !== 'object') {
+    return null;
+  }
+
+  const resolved = (defs as Record<string, unknown>)[value];
+  if (typeof resolved !== 'string') {
+    return null;
+  }
+
+  return normalizeHexColor(resolved);
+}
+
+function resolveThemeColorValue(theme: Record<string, unknown>, value: unknown): string | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    return resolveThemeColorToken(theme, value);
+  }
+
+  if (typeof value === 'object') {
+    const palette = value as Record<string, unknown>;
+    const preferred = [palette.dark, palette.light, palette.default, palette.primary, palette.accent];
+    for (const candidate of preferred) {
+      const resolved = resolveThemeColorToken(theme, candidate);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+
+  return null;
+}
+
+function pickThemeColor(theme: Record<string, unknown>, ...candidates: unknown[]): string | null {
+  for (const candidate of candidates) {
+    const resolved = resolveThemeColorValue(theme, candidate);
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  return null;
+}
+
 function toBundleCardTheme(input: unknown): BundleCardTheme | null {
   if (!input || typeof input !== 'object') {
     return null;
@@ -259,14 +383,26 @@ function isThemePath(pathValue: unknown): pathValue is string {
   return /(^|\/)(\.opencode\/)?themes\//.test(normalized) && normalized.endsWith('.json');
 }
 
-function getCardThemeFromSnapshot(storagePath: string | null | undefined, fileIndex: ParsedFileIndexEntry[] | null): BundleCardTheme | null {
-  if (!storagePath || !fileIndex) {
+async function getCardThemeFromSnapshot(params: {
+  storagePath: string | null | undefined;
+  bundleId: string;
+  commitSha: string | null | undefined;
+  fileIndex: ParsedFileIndexEntry[] | null;
+}): Promise<BundleCardTheme | null> {
+  const { storagePath, bundleId, commitSha, fileIndex } = params;
+
+  if (!storagePath || !fileIndex || !commitSha) {
     return null;
   }
 
-  // In serverless deployments we may store snapshots in remote object storage.
-  // This helper is intentionally best-effort and should never crash list endpoints.
-  if (storagePath.startsWith('http://') || storagePath.startsWith('https://')) {
+  let localSnapshotPath = storagePath;
+  try {
+    localSnapshotPath = await materializeSnapshotToLocal({
+      storagePath,
+      bundleId,
+      commitSha,
+    });
+  } catch {
     return null;
   }
 
@@ -280,7 +416,7 @@ function getCardThemeFromSnapshot(storagePath: string | null | undefined, fileIn
 
   let content: string | null = null;
   try {
-    content = extractFileFromZip(storagePath, themePath);
+    content = extractFileFromZip(localSnapshotPath, themePath);
   } catch {
     return null;
   }
@@ -298,20 +434,103 @@ function getCardThemeFromSnapshot(storagePath: string | null | undefined, fileIn
     const colors = themeObj.colors;
     const colorMap = (colors && typeof colors === 'object') ? (colors as Record<string, unknown>) : null;
 
-    const background = normalizeHexColor(colorMap?.surface ?? colorMap?.background ?? themeObj.background);
-    const border = normalizeHexColor(colorMap?.border ?? colorMap?.outline ?? colorMap?.primary);
-    const title = normalizeHexColor(colorMap?.text ?? colorMap?.foreground ?? themeObj.text);
-    const text = normalizeHexColor(colorMap?.mutedText ?? colorMap?.muted ?? colorMap?.text ?? themeObj.text);
-    const chipBackground = normalizeHexColor(colorMap?.surface ?? colorMap?.background);
-    const chipBorder = normalizeHexColor(colorMap?.primary ?? colorMap?.border);
-    const chipText = normalizeHexColor(colorMap?.text ?? colorMap?.foreground);
+    const nestedTheme = themeObj.theme;
+    const nestedThemeMap = (nestedTheme && typeof nestedTheme === 'object')
+      ? (nestedTheme as Record<string, unknown>)
+      : null;
+
+    const background = pickThemeColor(
+      themeObj,
+      colorMap?.surface,
+      colorMap?.background,
+      themeObj.background,
+      nestedThemeMap?.background,
+      nestedThemeMap?.backgroundPanel,
+      nestedThemeMap?.backgroundElement,
+    );
+    const backgroundHover = pickThemeColor(
+      themeObj,
+      nestedThemeMap?.backgroundElement,
+      nestedThemeMap?.backgroundPanel,
+      colorMap?.surface,
+      colorMap?.background,
+    );
+    const border = pickThemeColor(
+      themeObj,
+      colorMap?.border,
+      colorMap?.outline,
+      colorMap?.primary,
+      nestedThemeMap?.border,
+      nestedThemeMap?.primary,
+      nestedThemeMap?.accent,
+    );
+    const borderHover = pickThemeColor(
+      themeObj,
+      nestedThemeMap?.borderActive,
+      nestedThemeMap?.primary,
+      nestedThemeMap?.accent,
+      colorMap?.primary,
+      colorMap?.border,
+    );
+    const title = pickThemeColor(
+      themeObj,
+      colorMap?.text,
+      colorMap?.foreground,
+      themeObj.text,
+      nestedThemeMap?.text,
+      nestedThemeMap?.markdownStrong,
+    );
+    const text = pickThemeColor(
+      themeObj,
+      colorMap?.mutedText,
+      colorMap?.muted,
+      colorMap?.text,
+      themeObj.text,
+      nestedThemeMap?.textMuted,
+      nestedThemeMap?.text,
+      nestedThemeMap?.markdownText,
+    );
+    const mutedText = pickThemeColor(
+      themeObj,
+      colorMap?.mutedText,
+      colorMap?.muted,
+      nestedThemeMap?.textMuted,
+      nestedThemeMap?.diffContext,
+      text,
+    );
+    const chipBackground = pickThemeColor(
+      themeObj,
+      colorMap?.surface,
+      colorMap?.background,
+      nestedThemeMap?.backgroundElement,
+      nestedThemeMap?.backgroundPanel,
+      nestedThemeMap?.background,
+    );
+    const chipBorder = pickThemeColor(
+      themeObj,
+      colorMap?.primary,
+      colorMap?.border,
+      nestedThemeMap?.primary,
+      nestedThemeMap?.border,
+      nestedThemeMap?.accent,
+    );
+    const chipText = pickThemeColor(
+      themeObj,
+      colorMap?.text,
+      colorMap?.foreground,
+      nestedThemeMap?.text,
+      nestedThemeMap?.markdownText,
+      nestedThemeMap?.markdownStrong,
+    );
 
     const theme: BundleCardTheme = {
       background: background ?? undefined,
+      backgroundHover: backgroundHover ?? undefined,
       border: border ?? undefined,
+      borderHover: borderHover ?? undefined,
       title: title ?? undefined,
       text: text ?? undefined,
-      mutedText: text ?? undefined,
+      mutedText: mutedText ?? undefined,
       chipBackground: chipBackground ?? undefined,
       chipBorder: chipBorder ?? undefined,
       chipText: chipText ?? undefined,
@@ -426,6 +645,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         bundles.map(async (bundle) => {
           const latestSnapshot = await db.select({
             createdAt: snapshot.createdAt,
+            commitSha: snapshot.commitSha,
             fileIndex: snapshot.fileIndex,
             safetyResults: snapshot.safetyResults,
             storagePath: snapshot.storagePath,
@@ -447,7 +667,12 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           const slug = typeof manifest?.id === 'string' ? manifest.id : bundle.githubRepo;
           const opencodeCompatibility = getManifestOpencodeCompatibility(manifest);
           const manifestCardTheme = toBundleCardTheme(manifest?.cardTheme ?? manifest?.bundleCardTheme);
-          const snapshotCardTheme = getCardThemeFromSnapshot(latestSnapshot[0]?.storagePath, fileIndex);
+          const snapshotCardTheme = await getCardThemeFromSnapshot({
+            storagePath: latestSnapshot[0]?.storagePath,
+            bundleId: bundle.id,
+            commitSha: latestSnapshot[0]?.commitSha,
+            fileIndex,
+          });
           const cardTheme = manifestCardTheme ?? snapshotCardTheme;
           const updatedAt = toIsoTimestamp(
             latestSnapshot[0]?.createdAt ?? bundle.updatedAt ?? bundle.createdAt
@@ -464,6 +689,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
             _opencodeCompatibility: string;
           } = {
             id: bundle.id,
+            shareCode: toBundleShareCode(bundle.id),
             slug,
             name,
             summary,
@@ -526,6 +752,64 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       console.error('Failed to fetch bundles:', error);
       reply.code(500);
       return { error: 'Failed to fetch bundles' };
+    }
+  });
+
+  async function resolveShareCodeToBundleId(code: string): Promise<string | null> {
+    const decodedBundleId = bundleIdFromShareCode(code);
+
+    let resolvedBundleId = decodedBundleId;
+    if (!resolvedBundleId) {
+      resolvedBundleId = await resolveBundleId(code);
+    }
+
+    if (!resolvedBundleId) {
+      return null;
+    }
+
+    const bundle = await db.select({ id: publisherBundle.id })
+      .from(publisherBundle)
+      .where(eq(publisherBundle.id, resolvedBundleId))
+      .limit(1);
+
+    return bundle[0]?.id ?? null;
+  }
+
+  // Resolve short share code to canonical bundle id.
+  fastify.get('/api/share/:code', async (request, reply) => {
+    try {
+      const { code } = request.params as { code: string };
+      const bundleId = await resolveShareCodeToBundleId(code);
+      if (!bundleId) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
+
+      return {
+        bundleId,
+      };
+    } catch (error) {
+      console.error('Failed to resolve share code:', error);
+      reply.code(500);
+      return { error: 'Failed to resolve share code' };
+    }
+  });
+
+  // Redirect short share links for non-JS clients (bots, unfurlers).
+  fastify.get('/api/share/:code/redirect', async (request, reply) => {
+    try {
+      const { code } = request.params as { code: string };
+      const bundleId = await resolveShareCodeToBundleId(code);
+      if (!bundleId) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
+
+      return reply.redirect(`/bundle/${bundleId}`, 302);
+    } catch (error) {
+      console.error('Failed to redirect share code:', error);
+      reply.code(500);
+      return { error: 'Failed to redirect share code' };
     }
   });
 
@@ -621,11 +905,17 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       const manifestCardTheme = toBundleCardTheme(manifest?.cardTheme ?? manifest?.bundleCardTheme);
-      const snapshotCardTheme = getCardThemeFromSnapshot(latestSnapshot[0]?.storagePath, fileIndex);
+      const snapshotCardTheme = await getCardThemeFromSnapshot({
+        storagePath: latestSnapshot[0]?.storagePath,
+        bundleId: resolvedBundleId,
+        commitSha: latestSnapshot[0]?.commitSha,
+        fileIndex,
+      });
       const cardTheme = manifestCardTheme ?? snapshotCardTheme;
 
       return {
         id: bundleData.id,
+        shareCode: toBundleShareCode(bundleData.id),
         name: manifest?.name || bundleData.githubRepo,
         summary: manifest?.summary || '',
         description: manifest?.description || '',
@@ -736,7 +1026,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           return { error: 'File not found in bundle' };
         }
         
-        if (fileEntry.isBinary || !fileEntry.isPreviewable) {
+        if (fileEntry.isBinary) {
           reply.code(400);
           return { error: 'File is not previewable (binary file)' };
         }

@@ -933,9 +933,9 @@ sed -n '1,160p' /tmp/opendots-INSTALL.md
 
 ## Contents
 
-- **{Category 1}** - {file list and purpose}
-- **{Category 2}** - {file list and purpose}
-- **{Category 3}** - {file list and purpose}
+<!-- OPENDOTS_AUTO_CONTENTS_START -->
+- Auto-generated contents will be inserted here (skills/plugins/commands/themes/agents/tools).
+<!-- OPENDOTS_AUTO_CONTENTS_END -->
 
 ## Safety
 
@@ -946,6 +946,307 @@ This bundle is scanned by OpenDots. Review safety badges and file previews befor
 - **[Browse bundles]({OPENDOTS_SITE_BASE}/browse)** - Explore community configs
 - **[Publish your own]({OPENDOTS_SITE_BASE})** - Share your OpenCode setup
 - **[OpenDots]({OPENDOTS_SITE_BASE})** - Registry homepage
+```
+
+## Step 4.6 - Auto-generate plugin/skill/command/MCP descriptions (required)
+
+Do this after creating `README.md` and before `git add`.
+
+Goal: replace the `OPENDOTS_AUTO_CONTENTS_*` block with a generated inventory that explains what each item does, including MCP servers from `opencode.public.json`.
+
+Important: this pass must read each source file in full before summarizing. Do not summarize from just the first line.
+
+Run from repo root:
+
+```bash
+python3 - <<'PY'
+from __future__ import annotations
+
+import json
+import re
+from pathlib import Path
+
+REPO = Path('.').resolve()
+README = REPO / 'README.md'
+
+START_MARKER = '<!-- OPENDOTS_AUTO_CONTENTS_START -->'
+END_MARKER = '<!-- OPENDOTS_AUTO_CONTENTS_END -->'
+
+TARGETS = [
+  ('Skills', ['skills', '.opencode/skills'], {'.md', '.txt'}),
+  ('Plugins', ['plugins', '.opencode/plugins', 'disabled-plugins', '.opencode/disabled-plugins'], {'.json', '.jsonc', '.md', '.txt'}),
+  ('Commands', ['commands', '.opencode/commands', 'command'], {'.md', '.txt', '.json', '.jsonc'}),
+  ('Agents', ['agents', '.opencode/agents', 'agent'], {'.md', '.txt', '.json', '.jsonc'}),
+  ('Themes', ['themes', '.opencode/themes'], {'.json', '.jsonc', '.md'}),
+  ('Tools', ['tools', '.opencode/tools'], {'.json', '.jsonc', '.md', '.txt'}),
+]
+
+KNOWN_MCP_SUMMARIES = {
+  'kagi-search': 'Private web search MCP for high-quality, ad-free search results.',
+  'context7': 'Library and framework docs MCP for up-to-date API references and examples.',
+  'github': 'GitHub MCP for repository, issue, PR, and workflow operations.',
+  'qmd': 'Local markdown knowledge search MCP for indexed notes and docs.',
+  'vercel': 'Vercel MCP for deployments, logs, and project/runtime diagnostics.',
+  'browser-use': 'Browser automation MCP for navigation, screenshots, and extraction.',
+  'perplexity-webui': 'Perplexity research MCP for live web answers and deep research.',
+  'stitch': 'Stitch UI generation MCP for project/screen creation and editing.',
+}
+
+def read_text(path: Path) -> str:
+  try:
+    return path.read_text(encoding='utf-8', errors='replace')
+  except Exception:
+    return ''
+
+def strip_md_noise(line: str) -> str:
+  line = line.strip()
+  line = re.sub(r'^#+\s*', '', line)
+  line = re.sub(r'`+', '', line)
+  line = re.sub(r'\s+', ' ', line)
+  return line.strip(' -*\t')
+
+def remove_fenced_code_blocks(text: str) -> str:
+  lines = text.splitlines()
+  in_code = False
+  kept: list[str] = []
+  for raw in lines:
+    stripped = raw.strip()
+    if stripped.startswith('```'):
+      in_code = not in_code
+      continue
+    if in_code:
+      continue
+    kept.append(raw)
+  return '\n'.join(kept)
+
+def first_meaningful_paragraph(text: str) -> str:
+  cleaned = remove_fenced_code_blocks(text)
+  cleaned = re.sub(r'<!--.*?-->', '', cleaned, flags=re.S)
+  paragraphs = [p.strip() for p in re.split(r'\n\s*\n', cleaned) if p.strip()]
+
+  for paragraph in paragraphs:
+    if paragraph.startswith('#'):
+      continue
+    if re.match(r'^[-*]\s+', paragraph):
+      continue
+    if re.match(r'^\d+[.)]\s+', paragraph):
+      continue
+    collapsed = strip_md_noise(paragraph.replace('\n', ' '))
+    if len(collapsed.split()) >= 6:
+      return collapsed[:220]
+
+  return ''
+
+def md_summary(text: str) -> str:
+  frontmatter = re.match(r'^---\n(.*?)\n---\n', text, flags=re.S)
+  if frontmatter:
+    desc = re.search(r'(?im)^\s*(description|summary|purpose)\s*:\s*(.+)$', frontmatter.group(1))
+    if desc and desc.group(2).strip():
+      return strip_md_noise(desc.group(2))[:220]
+
+  section_patterns = [
+    r'(?is)^##\s*overview\s*\n(.*?)(?=\n##\s+|\Z)',
+    r'(?is)^##\s*summary\s*\n(.*?)(?=\n##\s+|\Z)',
+    r'(?is)^##\s*purpose\s*\n(.*?)(?=\n##\s+|\Z)',
+    r'(?is)^##\s*description\s*\n(.*?)(?=\n##\s+|\Z)',
+  ]
+  for pattern in section_patterns:
+    match = re.search(pattern, text, flags=re.M)
+    if not match:
+      continue
+    paragraph = first_meaningful_paragraph(match.group(1))
+    if paragraph:
+      return paragraph[:220]
+
+  inline_desc = re.search(r'(?im)^\s*(description|summary|purpose)\s*[:=-]\s*(.+)$', text)
+  if inline_desc and inline_desc.group(2).strip():
+    return strip_md_noise(inline_desc.group(2))[:220]
+
+  paragraph = first_meaningful_paragraph(text)
+  if paragraph:
+    return paragraph[:220]
+
+  return ''
+
+def deep_lookup_string(value: object, keys: tuple[str, ...], depth: int = 0) -> str:
+  if depth > 3:
+    return ''
+
+  if isinstance(value, dict):
+    for key in keys:
+      candidate = value.get(key)
+      if isinstance(candidate, str) and candidate.strip():
+        return candidate.strip()[:220]
+
+    for nested in value.values():
+      found = deep_lookup_string(nested, keys, depth + 1)
+      if found:
+        return found
+
+  if isinstance(value, list):
+    for nested in value[:20]:
+      found = deep_lookup_string(nested, keys, depth + 1)
+      if found:
+        return found
+
+  return ''
+
+def json_summary(text: str, path: Path) -> str:
+  try:
+    data = json.loads(text)
+  except Exception:
+    return ''
+
+  if isinstance(data, dict):
+    found = deep_lookup_string(data, ('description', 'summary', 'purpose', 'title', 'name'))
+    if found:
+      return found
+
+    if path.name.lower() == 'package.json':
+      desc = data.get('description')
+      if isinstance(desc, str) and desc.strip():
+        return desc.strip()[:220]
+  return ''
+
+def file_summary(path: Path) -> str:
+  text = read_text(path)
+  suffix = path.suffix.lower()
+
+  if suffix in {'.json', '.jsonc'}:
+    summary = json_summary(text, path)
+    if summary:
+      return summary
+
+  summary = md_summary(text)
+  if summary:
+    return summary
+
+  stem = path.stem.replace('-', ' ').replace('_', ' ').strip()
+  if stem:
+    return f'{stem.title()} definition.'
+  return 'Definition file.'
+
+def iter_files(base: Path, allowed_suffixes: set[str]):
+  for path in sorted(base.rglob('*')):
+    if not path.is_file():
+      continue
+    if path.suffix.lower() not in allowed_suffixes:
+      continue
+    if any(part.startswith('.') and part not in {'.opencode'} for part in path.parts):
+      continue
+    yield path
+
+def command_name(value: object) -> str:
+  if isinstance(value, list) and value:
+    first = value[0]
+    if isinstance(first, str) and first.strip():
+      return first.strip()
+  if isinstance(value, str) and value.strip():
+    return value.strip().split()[0]
+  return ''
+
+def normalize_name(value: str) -> str:
+  return value.strip().lower().replace('_', '-')
+
+def guess_mcp_summary(name: str, cfg: object) -> str:
+  normalized = normalize_name(name)
+  known = KNOWN_MCP_SUMMARIES.get(normalized)
+  if known:
+    return known
+
+  if isinstance(cfg, dict):
+    for key in ('description', 'summary', 'purpose', 'title'):
+      v = cfg.get(key)
+      if isinstance(v, str) and v.strip():
+        return v.strip()[:180]
+
+    cmd = command_name(cfg.get('command'))
+    if cmd:
+      args = cfg.get('args')
+      if isinstance(args, list) and args:
+        trimmed: list[str] = []
+        for arg in args[:3]:
+          if isinstance(arg, str) and arg.strip():
+            trimmed.append(arg.strip())
+        if trimmed:
+          return f'MCP server powered by `{cmd}` with args: `{" ".join(trimmed)}`.'
+      return f'MCP server powered by `{cmd}`.'
+
+    url = cfg.get('url')
+    if isinstance(url, str) and url.strip():
+      return f'Remote MCP endpoint at `{url.strip()}`.'
+
+  return f'{name} MCP integration for specialized tooling.'
+
+def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
+  config_path = repo / 'opencode.public.json'
+  if not config_path.exists() or not config_path.is_file():
+    return []
+
+  try:
+    data = json.loads(config_path.read_text(encoding='utf-8', errors='replace'))
+  except Exception:
+    return [('opencode.public.json', 'Public OpenCode MCP export (could not parse MCP details).')]
+
+  if not isinstance(data, dict):
+    return []
+
+  mcp = data.get('mcp')
+  if not isinstance(mcp, dict):
+    return []
+
+  rows: list[tuple[str, str]] = []
+  for name in sorted(mcp.keys()):
+    rows.append((name, guess_mcp_summary(name, mcp.get(name))))
+
+  return rows
+
+sections: list[str] = []
+
+for label, dirs, suffixes in TARGETS:
+  collected: list[tuple[str, str]] = []
+  seen = set()
+  for d in dirs:
+    folder = REPO / d
+    if not folder.exists() or not folder.is_dir():
+      continue
+    for file_path in iter_files(folder, suffixes):
+      rel = file_path.relative_to(REPO).as_posix()
+      if rel in seen:
+        continue
+      seen.add(rel)
+      collected.append((rel, file_summary(file_path)))
+
+  if not collected:
+    continue
+
+  sections.append(f'- **{label}**')
+  for rel, summary in collected:
+    sections.append(f'  - `{rel}` - {summary}')
+
+if not sections:
+  sections = ['- No publishable artifacts were found in the default categories.']
+
+mcp_entries = collect_mcp_entries(REPO)
+if mcp_entries:
+  sections.append('- **MCP Servers**')
+  for name, summary in mcp_entries:
+    sections.append(f'  - `{name}` - {summary}')
+
+if not README.exists():
+  raise SystemExit('README.md not found. Run Step 4.5 first.')
+
+readme_text = README.read_text(encoding='utf-8', errors='replace')
+if START_MARKER not in readme_text or END_MARKER not in readme_text:
+  raise SystemExit('README.md is missing OPENDOTS_AUTO_CONTENTS markers.')
+
+replacement = '\n'.join([START_MARKER, *sections, END_MARKER])
+pattern = re.compile(re.escape(START_MARKER) + r'.*?' + re.escape(END_MARKER), re.S)
+updated = pattern.sub(replacement, readme_text, count=1)
+README.write_text(updated, encoding='utf-8')
+
+print('README contents block updated.')
+PY
 ```
 
 ---

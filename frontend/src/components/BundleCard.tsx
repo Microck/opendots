@@ -8,6 +8,7 @@ import styles from './BundleCard.module.css'
 
 export interface BundleCardData {
   id: string
+  shareCode: string
   slug: string
   name: string
   summary: string

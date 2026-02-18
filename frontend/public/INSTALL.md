@@ -34,10 +34,19 @@ sed -n '1,160p' /tmp/opendots-INSTALL.md
 Bundle input can be:
 
 - Bundle URL: `https://opendots.me/bundle/<bundle-id-or-slug>`
+- Short share URL: `https://opendots.me/<share-code>`
 - Bundle ID (UUID)
 - Bundle slug/name
 
 Resolve this to one identifier string and use it in API calls.
+
+If the input is a short share URL (`/{share-code}`), resolve it first:
+
+```bash
+curl -fsS "$OPENDOTS_API_BASE/api/share/{SHARE_CODE}" | cat
+```
+
+Then use returned `bundleId` as `{IDENTIFIER}`.
 
 ---
 

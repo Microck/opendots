@@ -17,6 +17,7 @@ const SignIn = lazy(() => import('./pages/SignIn'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Register = lazy(() => import('./pages/Register'))
 const Docs = lazy(() => import('./pages/Docs'))
+const ShortShareRedirect = lazy(() => import('./pages/ShortShareRedirect'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 interface SessionUser {
@@ -105,6 +106,7 @@ export default function App() {
                 <Route path="/dashboard" element={<PageTransition><Dashboard /></PageTransition>} />
                 <Route path="/register" element={<PageTransition><Register /></PageTransition>} />
                 <Route path="/docs" element={<PageTransition><Docs /></PageTransition>} />
+                <Route path="/:shareCode" element={<PageTransition><ShortShareRedirect /></PageTransition>} />
                 <Route path="*" element={<PageTransition><NotFound /></PageTransition>} />
               </Routes>
             </Suspense>

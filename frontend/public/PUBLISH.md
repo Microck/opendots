@@ -1168,11 +1168,25 @@ def json_summary(text: str, path: Path) -> str:
         return desc.strip()[:220]
   return ''
 
+def looks_like_json(text: str) -> bool:
+  stripped = text.lstrip()
+  if not stripped:
+    return False
+  if not (stripped.startswith('{') or stripped.startswith('[')):
+    return False
+  # Cheap check to avoid attempting json on obviously non-json files.
+  tail = stripped.rstrip()
+  if stripped.startswith('{') and not tail.endswith('}'):
+    return False
+  if stripped.startswith('[') and not tail.endswith(']'):
+    return False
+  return True
+
 def file_summary(path: Path) -> str:
   text = read_text(path)
   suffix = path.suffix.lower()
 
-  if suffix in {'.json', '.jsonc'}:
+  if suffix in {'.json', '.jsonc'} or (suffix == '' and looks_like_json(text)):
     summary = json_summary(text, path)
     if summary:
       return summary

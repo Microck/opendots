@@ -64,7 +64,7 @@ Run the `python3 - <<'PY'` block from Step 4.6 in your repo root.
 
 If Step 4.6 produces any MCP line that asks you to "Add an entry to `mcp.descriptions.json`":
 
-1) Create/update `mcp.descriptions.json` in the repo root as a JSON object mapping MCP name -> description.
+1) Create/update `mcp.descriptions.json` in the repo root as a JSON object mapping MCP name -> description (and optional source).
 2) Re-run Step 4.6.
 
 This is the intended workflow: OpenCode MCP configs usually do not include descriptive text.

@@ -980,11 +980,21 @@ How to write good MCP descriptions (AI workflow):
 
 Override format:
 
-Create `mcp.descriptions.json` in the repo root:
+Create `mcp.descriptions.json` in the repo root. Values can be either:
+
+- a string (description only)
+- an object with `description` and optional `source` (preferred)
 
 ```json
 {
-  "discord-py-self": "Control a Discord account: read/send messages, manage channels/roles, and interact with components.",
+  "discord-py-self": {
+    "description": "Control a Discord account: read/send messages, manage channels/roles, and interact with components.",
+    "source": "https://github.com/<upstream>/discord-py-self"
+  },
+  "motion": {
+    "description": "Generate CSS easing helpers: spring-like and bounce-like linear() transitions tuned by duration/bounce for UI animation.",
+    "source": "https://www.npmjs.com/package/motion-studio-mcp"
+  },
   "ssh-nas": "Run commands over SSH on a NAS host: execute shell commands, use sudo, and fetch diagnostics for ops workflows."
 }
 ```
@@ -1330,14 +1340,12 @@ def plugin_registry_info(path: Path) -> tuple[int, list[str]]:
 def is_plugin_registry_file(path: Path) -> bool:
   return path.name.lower() in {'marketplace.json', 'marketplace.jsonc'}
 
-def load_mcp_description_overrides(repo: Path) -> dict[str, str]:
-  """Optional overrides for MCP descriptions.
+def load_mcp_description_overrides(repo: Path) -> dict[str, dict[str, str]]:
+  """Optional overrides for MCP descriptions and source links.
 
-  File format: JSON object mapping MCP name -> description.
-  Example:
-  {
-    "discord-py-self": "Control a Discord user account: read/send messages, manage channels/roles, and interact with components."
-  }
+  File format: JSON object mapping MCP name -> either:
+  - string: description
+  - object: {"description": "...", "source": "https://..."}
   """
   candidates = [repo / 'mcp.descriptions.json', repo / '.opencode' / 'mcp.descriptions.json']
   for candidate in candidates:
@@ -1349,13 +1357,32 @@ def load_mcp_description_overrides(repo: Path) -> dict[str, str]:
       continue
     if not isinstance(data, dict):
       continue
-    out: dict[str, str] = {}
+    out: dict[str, dict[str, str]] = {}
     for k, v in data.items():
-      if not isinstance(k, str) or not isinstance(v, str):
+      if not isinstance(k, str) or not k.strip():
         continue
-      if not k.strip() or not v.strip():
+
+      norm = normalize_name(k)
+
+      if isinstance(v, str) and v.strip():
+        out[norm] = {
+          'description': compact_summary(v, 220),
+        }
         continue
-      out[normalize_name(k)] = compact_summary(v, 220)
+
+      if isinstance(v, dict):
+        desc = v.get('description') or v.get('summary') or v.get('purpose')
+        if isinstance(desc, str) and desc.strip():
+          entry: dict[str, str] = {
+            'description': compact_summary(desc, 220),
+          }
+
+          src = v.get('source') or v.get('repo') or v.get('url')
+          if isinstance(src, str) and src.strip():
+            entry['source'] = src.strip()
+
+          out[norm] = entry
+        continue
     if out:
       return out
   return {}
@@ -1484,13 +1511,42 @@ def _npm_source_url_for_package(package_name: str, cache: dict[str, str]) -> str
   cache[package_name] = repo_url or fallback
   return cache[package_name]
 
-def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str]) -> str:
-  """Return a single markdown link string, e.g. "([source](...))".
+def _looks_like_url(value: str) -> bool:
+  v = value.strip().lower()
+  return v.startswith('http://') or v.startswith('https://')
 
-  Links are best-effort. Prefer local sources when possible.
+def _looks_like_npm_name(value: str) -> bool:
+  v = value.strip()
+  if not v:
+    return False
+  return re.match(r'^(?:@[^/\s]+/)?[a-z0-9][a-z0-9._-]*$', v) is not None
+
+def _package_name_from_url(url: str) -> str:
+  try:
+    parsed = urllib.parse.urlparse(url)
+    qs = urllib.parse.parse_qs(parsed.query)
+    pkg = qs.get('package', [''])[0]
+    if isinstance(pkg, str) and pkg.strip():
+      return pkg.strip()
+  except Exception:
+    return ''
+  return ''
+
+def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str], overrides: dict[str, dict[str, str]]):
+  """Return (url, markdown) for an inferred source link.
+
+  Links are best-effort. Prefer explicit overrides and local sources when possible.
   """
   if not isinstance(cfg, dict):
-    return ''
+    return ('', '')
+
+  normalized = normalize_name(name)
+  override = overrides.get(normalized)
+  if override:
+    src = override.get('source')
+    if isinstance(src, str) and src.strip():
+      u = src.strip()
+      return (u, f'([source]({u}))')
 
   cmd_parts = command_tokens(cfg.get('command'))
   args = cfg.get('args')
@@ -1505,7 +1561,7 @@ def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str
     try:
       if candidate.exists() and candidate.is_file() and repo in candidate.resolve().parents:
         rel = candidate.relative_to(repo).as_posix()
-        return f'([source](./{rel}))'
+        return (f'./{rel}', f'([source](./{rel}))')
     except Exception:
       pass
 
@@ -1514,24 +1570,39 @@ def mcp_source_link(name: str, cfg: object, repo: Path, npm_cache: dict[str, str
   cmd_base = Path(cmd).name.lower() if cmd else ''
   if cmd_base in {'npx', 'pnpm', 'bunx', 'yarn', 'npm'}:
     package_token = first_non_flag([t for t in combined if t not in {'exec', 'dlx', 'mcp'}])
-    pkg = _npm_package_name_from_token(package_token)
-    if pkg and '<redacted>' not in pkg.lower():
-      src = _npm_source_url_for_package(pkg, npm_cache)
-      return f'([source]({src}))'
+    pkg_token = package_token.strip()
+
+    # Some MCPs use a registry tarball URL as the token; handle it explicitly.
+    if pkg_token and _looks_like_url(pkg_token):
+      extracted = _package_name_from_url(pkg_token)
+      if extracted:
+        pkg = extracted
+      else:
+        return (pkg_token, f'([source]({pkg_token}))')
+    else:
+      pkg = _npm_package_name_from_token(pkg_token)
+
+    pkg = pkg.strip()
+    if pkg and '<redacted>' not in pkg.lower() and _looks_like_npm_name(pkg):
+      npm_url = f'https://www.npmjs.com/package/{pkg}'
+      repo_url = _npm_source_url_for_package(pkg, npm_cache)
+      if repo_url and repo_url.startswith('http') and repo_url != npm_url:
+        return (repo_url, f'([package]({npm_url})) ([repo]({repo_url}))')
+      return (npm_url, f'([package]({npm_url}))')
 
   # Remote endpoint fallback.
   url = cfg.get('url')
   if isinstance(url, str) and url.strip():
     u = url.strip()
-    return f'([endpoint]({u}))'
+    return (u, f'([endpoint]({u}))')
 
-  return ''
+  return ('', '')
 
-def guess_mcp_summary(name: str, cfg: object, repo: Path, overrides: dict[str, str]) -> str:
+def guess_mcp_summary(name: str, cfg: object, repo: Path, overrides: dict[str, dict[str, str]]) -> str:
   normalized = normalize_name(name)
   override = overrides.get(normalized)
-  if override:
-    return override
+  if override and override.get('description'):
+    return override['description']
 
   words = [w for w in re.split(r'[-_]+', normalized) if w and w != 'mcp']
   name_phrase = ' '.join(words) if words else name
@@ -1660,9 +1731,9 @@ def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
   for name in sorted(mcp.keys()):
     cfg = mcp.get(name)
     summary = guess_mcp_summary(name, cfg, repo, overrides)
-    link = mcp_source_link(name, cfg, repo, npm_cache)
-    if link:
-      summary = f'{summary} {link}'
+    url, link_md = mcp_source_link(name, cfg, repo, npm_cache, overrides)
+    if link_md and (not url or url not in summary):
+      summary = f'{summary} {link_md}'
     rows.append((name, summary))
 
   return rows
@@ -1757,14 +1828,31 @@ if mcp_overrides.exists():
 
     data = json.loads(mcp_overrides.read_text(encoding='utf-8', errors='replace'))
     if not isinstance(data, dict) or not data:
-      errors.append('mcp.descriptions.json must be a non-empty JSON object mapping MCP name -> description.')
+      errors.append('mcp.descriptions.json must be a non-empty JSON object mapping MCP name -> description/source.')
     else:
       bad = []
       for k, v in data.items():
-        if not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip():
+        if not isinstance(k, str) or not k.strip():
           bad.append(str(k))
+          continue
+
+        if isinstance(v, str):
+          if not v.strip():
+            bad.append(k)
+          continue
+
+        if isinstance(v, dict):
+          desc = v.get('description') or v.get('summary') or v.get('purpose')
+          if not isinstance(desc, str) or not desc.strip():
+            bad.append(k)
+          src = v.get('source') or v.get('repo') or v.get('url')
+          if src is not None and (not isinstance(src, str) or not src.strip()):
+            bad.append(k)
+          continue
+
+        bad.append(k)
       if bad:
-        errors.append('mcp.descriptions.json contains invalid entries. Keys and values must be non-empty strings.')
+        errors.append('mcp.descriptions.json contains invalid entries. Values must be a non-empty string or an object with a non-empty description.')
   except Exception:
     errors.append('mcp.descriptions.json exists but is not valid JSON.')
 

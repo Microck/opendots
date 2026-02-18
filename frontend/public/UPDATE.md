@@ -65,6 +65,19 @@ Run the `python3 - <<'PY'` block from Step 4.6 in your repo root.
 If Step 4.6 produces any MCP line that asks you to "Add an entry to `mcp.descriptions.json`":
 
 1) Create/update `mcp.descriptions.json` in the repo root as a JSON object mapping MCP name -> description (and optional source).
+
+Format:
+
+```json
+{
+  "discord-py-self": {
+    "description": "Control a Discord account: read/send messages, manage channels/roles, and interact with components.",
+    "source": "https://github.com/<upstream>/discord-py-self"
+  },
+  "ssh-nas": "Run commands over SSH on a NAS host: execute shell commands, use sudo, and fetch diagnostics for ops workflows."
+}
+```
+
 2) Re-run Step 4.6.
 
 This is the intended workflow: OpenCode MCP configs usually do not include descriptive text.

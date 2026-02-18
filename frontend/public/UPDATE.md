@@ -42,11 +42,18 @@ This automates claim start -> claim file commit/push -> claim complete.
 
 Apply your file changes in the repository first.
 
-Then regenerate README overview content (skills/plugins/commands/MCP descriptions) by running Step 4.6 from `PUBLISH.md`:
+Then regenerate README overview content by running Step 4.6 from `PUBLISH.md`.
+
+Current behavior:
+
+- Skills/Commands/Agents/Themes/Tools are emitted as name-only entries (cleaner for large bundles).
+- Plugins and MCP Servers keep purpose-focused summaries.
+
+Fetch and inspect Step 4.6 (avoid brittle line numbers):
 
 ```bash
 curl -fsSL "$OPENDOTS_SITE_BASE/PUBLISH.md" -o /tmp/opendots-PUBLISH.md
-sed -n '940,1220p' /tmp/opendots-PUBLISH.md
+awk '/^## Step 4\.6/{flag=1} /^## Step 4\.7/{if(flag){exit}} flag{print}' /tmp/opendots-PUBLISH.md
 ```
 
 Run the `python3 - <<'PY'` block from Step 4.6 in your repo root.
@@ -55,7 +62,7 @@ Then run the Step 4.7 quality gate from `PUBLISH.md`.
 
 ```bash
 curl -fsSL "$OPENDOTS_SITE_BASE/PUBLISH.md" -o /tmp/opendots-PUBLISH.md
-sed -n '1252,1355p' /tmp/opendots-PUBLISH.md
+awk '/^## Step 4\.7/{flag=1} /^## Step 5/{if(flag){exit}} flag{print}' /tmp/opendots-PUBLISH.md
 ```
 
 ---
@@ -124,4 +131,4 @@ Confirm:
 
 - `latestSnapshot.commitSha` matches latest commit
 - file list contains expected updates
-- `README.md` overview section includes generated descriptions
+- `README.md` overview section includes generated inventory (name-only sections + richer Plugin/MCP summaries)

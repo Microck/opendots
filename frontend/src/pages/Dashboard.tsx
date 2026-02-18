@@ -43,6 +43,7 @@ interface Bundle {
   repoHtmlUrl: string
   manifestJson: string | null
   accentColor: string | null
+  cardTheme?: BundleCardTheme | null
   lastImport: {
     id: string
     status: string
@@ -52,6 +53,19 @@ interface Bundle {
     errorCode: string | null
     errorMessage: string | null
   } | null
+}
+
+interface BundleCardTheme {
+  background?: string
+  backgroundHover?: string
+  border?: string
+  borderHover?: string
+  title?: string
+  text?: string
+  mutedText?: string
+  chipBackground?: string
+  chipBorder?: string
+  chipText?: string
 }
 
 interface BundleManifest {
@@ -130,6 +144,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const [bundles, setBundles] = useState<Bundle[]>([])
   const [loading, setLoading] = useState(true)
+  const [reloadingDashboard, setReloadingDashboard] = useState(false)
   const [refreshingBundles, setRefreshingBundles] = useState<Set<string>>(new Set())
   const [repoDetection, setRepoDetection] = useState<RepoDetection | null>(null)
   const [detectError, setDetectError] = useState<string | null>(null)
@@ -140,6 +155,8 @@ export default function Dashboard() {
   const [metadataError, setMetadataError] = useState<string | null>(null)
   const [publishPromptCopied, setPublishPromptCopied] = useState(false)
   const editorNameRef = useRef<HTMLInputElement>(null)
+  const bundleRequestTokenRef = useRef(0)
+  const autoReloadAttemptedRef = useRef(false)
   const prefersReducedMotion = useReducedMotion()
   const publishPrompt = `Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`
 
@@ -175,13 +192,72 @@ export default function Dashboard() {
 
   /* ── Data fetching ────────────────────────────────────────────── */
 
+  const normalizeTheme = (input: unknown): BundleCardTheme | null => {
+    if (!input || typeof input !== 'object') return null
+    const source = input as Record<string, unknown>
+    const pick = (key: keyof BundleCardTheme) =>
+      typeof source[key] === 'string' ? source[key] as string : undefined
+
+    const theme: BundleCardTheme = {
+      background: pick('background'),
+      backgroundHover: pick('backgroundHover'),
+      border: pick('border'),
+      borderHover: pick('borderHover'),
+      title: pick('title'),
+      text: pick('text'),
+      mutedText: pick('mutedText'),
+      chipBackground: pick('chipBackground'),
+      chipBorder: pick('chipBorder'),
+      chipText: pick('chipText'),
+    }
+
+    return Object.values(theme).some(Boolean) ? theme : null
+  }
+
+  const hydrateBundleThemes = useCallback(async (rawBundles: Bundle[]): Promise<Bundle[]> => {
+    const detailed = await Promise.all(
+      rawBundles.map(async (bundle) => {
+        try {
+          const response = await fetch(apiUrl(`/api/bundles/${bundle.id}`))
+          if (!response.ok) {
+            return bundle
+          }
+          const payload = await response.json() as {
+            accentColor?: unknown
+            cardTheme?: unknown
+          }
+
+          return {
+            ...bundle,
+            accentColor: typeof payload.accentColor === 'string' ? payload.accentColor : bundle.accentColor,
+            cardTheme: normalizeTheme(payload.cardTheme),
+          }
+        } catch {
+          return bundle
+        }
+      })
+    )
+
+    return detailed
+  }, [])
+
   const fetchBundles = useCallback(async () => {
+    const requestToken = Date.now()
+    bundleRequestTokenRef.current = requestToken
     try {
       const response = await fetch(apiUrl('/api/publisher/bundles'), { credentials: 'include' })
-      if (response.status === 401) { navigate('/signin'); return }
+      if (response.status === 401) { navigate('/signin'); return 0 }
       if (response.ok) {
         const data = await response.json()
-        setBundles(data.bundles || [])
+        const rawBundles = (data.bundles || []) as Bundle[]
+        setBundles(rawBundles)
+
+        void hydrateBundleThemes(rawBundles).then((hydratedBundles) => {
+          if (bundleRequestTokenRef.current !== requestToken) return
+          setBundles(hydratedBundles)
+        })
+
+        return rawBundles.length
       } else {
         setBundles([])
       }
@@ -189,7 +265,8 @@ export default function Dashboard() {
       console.error('Failed to fetch bundles:', error)
       setBundles([])
     }
-  }, [navigate])
+    return 0
+  }, [navigate, hydrateBundleThemes])
 
   const detectCanonicalRepo = useCallback(async () => {
     setDetectError(null)
@@ -224,12 +301,30 @@ export default function Dashboard() {
   const loadDashboardData = useCallback(async () => {
     setLoading(true)
     try {
-      await fetchBundles()
+      const bundleCount = await fetchBundles()
+      if (bundleCount === 0 && !autoReloadAttemptedRef.current) {
+        autoReloadAttemptedRef.current = true
+        window.setTimeout(() => {
+          void fetchBundles()
+          void detectCanonicalRepo()
+        }, 1200)
+      }
     } finally {
       setLoading(false)
       void detectCanonicalRepo()
     }
   }, [fetchBundles, detectCanonicalRepo])
+
+  const handleReloadDashboard = async () => {
+    setReloadingDashboard(true)
+    setPublishError(null)
+    setDetectError(null)
+    try {
+      await Promise.all([fetchBundles(), detectCanonicalRepo()])
+    } finally {
+      setReloadingDashboard(false)
+    }
+  }
 
   useEffect(() => {
     void loadDashboardData()
@@ -311,17 +406,59 @@ export default function Dashboard() {
     }
   }
 
-  const beginMetadataEdit = (bundle: Bundle) => {
+  const beginMetadataEdit = async (bundle: Bundle) => {
     const manifest = parseManifest(bundle)
     const tags = Array.isArray(manifest.tags) ? manifest.tags : []
+    let resolvedAccent = normalizeHexColor(bundle.accentColor || '')
+    let resolvedTheme = bundle.cardTheme ?? null
+
+    if (!resolvedTheme) {
+      try {
+        const response = await fetch(apiUrl(`/api/bundles/${bundle.id}`))
+        if (response.ok) {
+          const payload = await response.json() as {
+            accentColor?: unknown
+            cardTheme?: unknown
+          }
+          if (!resolvedAccent && typeof payload.accentColor === 'string') {
+            resolvedAccent = normalizeHexColor(payload.accentColor)
+          }
+          resolvedTheme = normalizeTheme(payload.cardTheme)
+        }
+      } catch {
+        // Best effort only; keep local values.
+      }
+    }
+
+    const primaryFromTheme =
+      resolvedAccent ||
+      normalizeHexColor(resolvedTheme?.chipBorder || '') ||
+      normalizeHexColor(resolvedTheme?.borderHover || '') ||
+      normalizeHexColor(resolvedTheme?.border || '')
+
+    const secondaryFromTheme =
+      normalizeHexColor(resolvedTheme?.backgroundHover || '') ||
+      normalizeHexColor(resolvedTheme?.chipBackground || '') ||
+      normalizeHexColor(resolvedTheme?.background || '')
+
+    const primary =
+      primaryFromTheme ||
+      normalizeHexColor(manifest.colors?.primary || '') ||
+      '#80dcff'
+
+    const secondary =
+      secondaryFromTheme ||
+      normalizeHexColor(manifest.colors?.secondary || '') ||
+      '#2d3348'
+
     setMetadataError(null)
     setEditingMetadata({
       bundleId: bundle.id,
       name: manifest.name || bundle.githubRepo,
       summary: manifest.summary || '',
       tagsInput: tags.join(', '),
-      accentColor: bundle.accentColor || manifest.colors?.primary || '',
-      secondaryColor: manifest.colors?.secondary || '',
+      accentColor: primary,
+      secondaryColor: secondary,
     })
   }
 
@@ -523,6 +660,7 @@ export default function Dashboard() {
     const manifest = parseManifest(bundle)
     const tags = Array.isArray(manifest.tags) ? manifest.tags : []
     const accent = bundle.accentColor || manifest.colors?.primary || '#80dcff'
+    const theme = bundle.cardTheme ?? buildAccentCardTheme(accent)
     const isRefreshing = refreshingBundles.has(bundle.id)
 
     return (
@@ -530,7 +668,20 @@ export default function Dashboard() {
         key={bundle.id}
         className={styles.bundleCard}
         variants={m ? staggerItemBlur : undefined}
-        style={{ '--accent': accent, '--accent-rgb': hexToRgb(accent) } as React.CSSProperties}
+        style={{
+          '--accent': accent,
+          '--accent-rgb': hexToRgb(accent),
+          '--card-bg-custom': theme?.background ?? undefined,
+          '--card-bg-hover-custom': theme?.backgroundHover ?? undefined,
+          '--card-border-custom': theme?.border ?? undefined,
+          '--card-border-hover-custom': theme?.borderHover ?? undefined,
+          '--card-title-custom': theme?.title ?? undefined,
+          '--card-text-custom': theme?.text ?? undefined,
+          '--card-muted-custom': theme?.mutedText ?? undefined,
+          '--card-chip-bg-custom': theme?.chipBackground ?? undefined,
+          '--card-chip-border-custom': theme?.chipBorder ?? undefined,
+          '--card-chip-text-custom': theme?.chipText ?? undefined,
+        } as React.CSSProperties}
         whileHover={m ? { y: -4 } : undefined}
         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
       >
@@ -591,7 +742,7 @@ export default function Dashboard() {
               </motion.button>
               <motion.button
                 className={`${styles.actionBtn} ${styles.editBtn}`}
-                onClick={() => beginMetadataEdit(bundle)}
+                onClick={() => void beginMetadataEdit(bundle)}
                 whileHover={m ? { scale: 1.15 } : undefined}
                 whileTap={m ? { scale: 0.9 } : undefined}
                 title="Edit metadata"
@@ -841,6 +992,16 @@ export default function Dashboard() {
               {bundles.length} BUNDLE{bundles.length !== 1 ? 'S' : ''}
             </span>
             <motion.button
+              onClick={() => void handleReloadDashboard()}
+              className={styles.btnSecondary}
+              disabled={reloadingDashboard}
+              whileHover={m ? { scale: 1.03 } : undefined}
+              whileTap={m ? { scale: 0.97 } : undefined}
+            >
+              {reloadingDashboard ? <CircleNotch size={14} className={styles.spinIcon} /> : <ArrowClockwise size={14} />}
+              {reloadingDashboard ? 'REFRESHING...' : 'REFRESH'}
+            </motion.button>
+            <motion.button
               onClick={() => navigate('/register')}
               className={styles.btnSecondary}
               whileHover={m ? { scale: 1.03 } : undefined}
@@ -962,6 +1123,59 @@ export default function Dashboard() {
 }
 
 /* ── Utility ────────────────────────────────────────────────────── */
+
+function normalizeHexColor(color: string): string | null {
+  const trimmed = color.trim()
+  const match = /^#?([0-9a-fA-F]{6})$/.exec(trimmed)
+  if (!match) return null
+  return `#${match[1].toLowerCase()}`
+}
+
+function hexToRgbObject(hex: string): { r: number; g: number; b: number } | null {
+  const normalized = normalizeHexColor(hex)
+  if (!normalized) return null
+  const value = normalized.slice(1)
+  return {
+    r: parseInt(value.slice(0, 2), 16),
+    g: parseInt(value.slice(2, 4), 16),
+    b: parseInt(value.slice(4, 6), 16),
+  }
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value)))
+  const toHex = (value: number) => clamp(value).toString(16).padStart(2, '0')
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`
+}
+
+function mixHex(colorA: string, colorB: string, weightA: number): string | null {
+  const rgbA = hexToRgbObject(colorA)
+  const rgbB = hexToRgbObject(colorB)
+  if (!rgbA || !rgbB) return null
+  const clampedWeightA = Math.max(0, Math.min(1, weightA))
+  const weightB = 1 - clampedWeightA
+
+  return rgbToHex(
+    rgbA.r * clampedWeightA + rgbB.r * weightB,
+    rgbA.g * clampedWeightA + rgbB.g * weightB,
+    rgbA.b * clampedWeightA + rgbB.b * weightB,
+  )
+}
+
+function buildAccentCardTheme(accentColor: string): BundleCardTheme {
+  return {
+    background: mixHex(accentColor, '#111827', 0.2) ?? '#17202f',
+    backgroundHover: mixHex(accentColor, '#1f2937', 0.28) ?? '#1f2937',
+    border: mixHex(accentColor, '#334155', 0.42) ?? '#3a5166',
+    borderHover: mixHex(accentColor, '#f8fafc', 0.48) ?? accentColor,
+    title: mixHex(accentColor, '#ffffff', 0.2) ?? '#f8fafc',
+    text: mixHex(accentColor, '#e2e8f0', 0.1) ?? '#dbe8ff',
+    mutedText: mixHex(accentColor, '#94a3b8', 0.1) ?? '#94a3b8',
+    chipBackground: mixHex(accentColor, '#0f172a', 0.18) ?? '#1a2435',
+    chipBorder: mixHex(accentColor, '#cbd5e1', 0.35) ?? accentColor,
+    chipText: mixHex(accentColor, '#ffffff', 0.22) ?? '#edf3ff',
+  }
+}
 
 function hexToRgb(hex: string): string {
   const clean = hex.replace('#', '')

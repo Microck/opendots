@@ -956,6 +956,12 @@ Goal: replace the `OPENDOTS_AUTO_CONTENTS_*` block with a generated inventory th
 
 Important: this pass must read each source file in full before summarizing. Do not summarize from just the first line.
 
+Coverage requirements for this step:
+
+- MCP entries must use server names (for example `kagi-search`) with purpose-focused summaries.
+- Plugin registries like `plugins/**/marketplace.json` must expand to individual plugin names (not just `marketplace` or `agents`).
+- If MCP descriptions are still generic, add `description` fields in `opencode.public.json` and re-run this step.
+
 Run from repo root:
 
 ```bash
@@ -964,6 +970,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from pathlib import Path
 
 REPO = Path('.').resolve()
@@ -982,6 +989,7 @@ TARGETS = [
 ]
 
 KNOWN_MCP_SUMMARIES = {
+  'agent-browser-mcp': 'Browser automation MCP for interactive browsing, screenshots, and page actions.',
   'kagi-search': 'Private web search MCP for high-quality, ad-free search results.',
   'context7': 'Library and framework docs MCP for up-to-date API references and examples.',
   'github': 'GitHub MCP for repository, issue, PR, and workflow operations.',
@@ -990,6 +998,38 @@ KNOWN_MCP_SUMMARIES = {
   'browser-use': 'Browser automation MCP for navigation, screenshots, and extraction.',
   'perplexity-webui': 'Perplexity research MCP for live web answers and deep research.',
   'stitch': 'Stitch UI generation MCP for project/screen creation and editing.',
+}
+
+GENERIC_SUMMARY_PHRASES = (
+  'definition file.',
+  'definition.',
+  'integration for specialized tooling',
+  'mcp server powered by `npx`',
+  'mcp server powered by `node`',
+)
+
+ROOT_FOLDERS = {
+  'Skills': {'skills'},
+  'Plugins': {'plugins', 'disabled-plugins'},
+  'Commands': {'commands', 'command'},
+  'Agents': {'agents', 'agent'},
+  'Themes': {'themes'},
+  'Tools': {'tools'},
+}
+
+SUMMARY_MODE_BY_SECTION = {
+  'Skills': 'name_only',
+  'Commands': 'name_only',
+  'Agents': 'name_only',
+  'Themes': 'name_only',
+  'Tools': 'name_only',
+  'Plugins': 'with_summary',
+}
+
+BUCKET_SEGMENTS = {
+  'agents', 'agent', 'commands', 'command', 'skills', 'themes', 'tools',
+  'modes', 'rules', 'prompts', 'plugins', 'disabled-plugins',
+  'reference', 'references', 'docs', 'examples', '.opencode'
 }
 
 def read_text(path: Path) -> str:
@@ -1136,6 +1176,50 @@ def iter_files(base: Path, allowed_suffixes: set[str]):
       continue
     yield path
 
+def strip_extension(name: str) -> str:
+  return re.sub(r'\.[^.]+$', '', name)
+
+def artifact_name_from_rel(label: str, rel_path: str) -> str:
+  parts = [p for p in rel_path.replace('\\', '/').split('/') if p]
+  if not parts:
+    return 'unknown'
+
+  lowered = [p.lower() for p in parts]
+  if lowered and lowered[0] == '.opencode':
+    parts = parts[1:]
+    lowered = lowered[1:]
+
+  roots = ROOT_FOLDERS.get(label, set())
+  start_idx = 0
+  for idx, seg in enumerate(lowered):
+    if seg in roots:
+      start_idx = idx + 1
+      break
+
+  path_tail = parts[start_idx:] if start_idx < len(parts) else parts
+  lowered_tail = [p.lower() for p in path_tail]
+
+  non_file_segments = [
+    seg for seg, low in zip(path_tail, lowered_tail)
+    if '.' not in seg and low not in BUCKET_SEGMENTS
+  ]
+
+  if non_file_segments:
+    return non_file_segments[-1]
+
+  leaf = parts[-1]
+  if leaf.lower() in {'agents.md', 'claude.md', 'skill.md', 'readme.md'} and len(parts) >= 2:
+    return strip_extension(parts[-2])
+
+  return strip_extension(leaf)
+
+def summary_score(summary: str) -> int:
+  score = min(len(summary), 220)
+  lower = summary.lower()
+  if any(phrase in lower for phrase in GENERIC_SUMMARY_PHRASES):
+    score -= 160
+  return score
+
 def command_name(value: object) -> str:
   if isinstance(value, list) and value:
     first = value[0]
@@ -1148,35 +1232,138 @@ def command_name(value: object) -> str:
 def normalize_name(value: str) -> str:
   return value.strip().lower().replace('_', '-')
 
+def command_tokens(value: object) -> list[str]:
+  if isinstance(value, list):
+    out = [str(v).strip() for v in value if isinstance(v, str) and v.strip()]
+    return out
+  if isinstance(value, str) and value.strip():
+    try:
+      return shlex.split(value)
+    except Exception:
+      return [value.strip()]
+  return []
+
+def first_non_flag(values: list[str]) -> str:
+  for value in values:
+    v = value.strip()
+    if not v or v.startswith('-'):
+      continue
+    return v
+  return ''
+
+def compact_summary(text: str, max_len: int = 220) -> str:
+  t = re.sub(r'\s+', ' ', text).strip()
+  if len(t) <= max_len:
+    return t
+  return t[:max_len - 1].rstrip() + '…'
+
+def plugin_entries_from_marketplace(path: Path) -> list[tuple[str, str]]:
+  if path.suffix.lower() not in {'.json', '.jsonc'}:
+    return []
+
+  text = read_text(path)
+  try:
+    data = json.loads(text)
+  except Exception:
+    return []
+
+  if not isinstance(data, dict):
+    return []
+
+  plugins = data.get('plugins')
+  if not isinstance(plugins, list) or not plugins:
+    return []
+
+  entries: list[tuple[str, str]] = []
+  for plugin in plugins:
+    if not isinstance(plugin, dict):
+      continue
+
+    raw_name = plugin.get('name') or plugin.get('id') or plugin.get('slug')
+    if not isinstance(raw_name, str) or not raw_name.strip():
+      continue
+
+    name = raw_name.strip()
+    desc = plugin.get('description') or plugin.get('summary') or plugin.get('purpose')
+    if isinstance(desc, str) and desc.strip():
+      summary = compact_summary(desc, 220)
+    else:
+      summary = 'Plugin entry from marketplace registry.'
+
+    entries.append((name, summary))
+
+  return entries
+
 def guess_mcp_summary(name: str, cfg: object) -> str:
   normalized = normalize_name(name)
   known = KNOWN_MCP_SUMMARIES.get(normalized)
   if known:
     return known
 
+  words = [w for w in re.split(r'[-_]+', normalized) if w and w != 'mcp']
+  name_phrase = ' '.join(words) if words else name
+
   if isinstance(cfg, dict):
+    if cfg.get('enabled') is False:
+      return 'MCP server is configured but disabled by default.'
+
     for key in ('description', 'summary', 'purpose', 'title'):
       v = cfg.get(key)
       if isinstance(v, str) and v.strip():
-        return v.strip()[:180]
-
-    cmd = command_name(cfg.get('command'))
-    if cmd:
-      args = cfg.get('args')
-      if isinstance(args, list) and args:
-        trimmed: list[str] = []
-        for arg in args[:3]:
-          if isinstance(arg, str) and arg.strip():
-            trimmed.append(arg.strip())
-        if trimmed:
-          return f'MCP server powered by `{cmd}` with args: `{" ".join(trimmed)}`.'
-      return f'MCP server powered by `{cmd}`.'
+        return compact_summary(v, 180)
 
     url = cfg.get('url')
     if isinstance(url, str) and url.strip():
-      return f'Remote MCP endpoint at `{url.strip()}`.'
+      host = re.sub(r'^https?://', '', url.strip()).split('/')[0]
+      return f'{name_phrase.title()} MCP endpoint hosted on `{host}`.'
 
-  return f'{name} MCP integration for specialized tooling.'
+    cmd_parts = command_tokens(cfg.get('command'))
+    cmd = cmd_parts[0] if cmd_parts else ''
+    args = cfg.get('args')
+    arg_parts = [a.strip() for a in args if isinstance(a, str) and a.strip()] if isinstance(args, list) else []
+
+    if cmd:
+      cmd_base = Path(cmd).name.lower()
+      combined = cmd_parts[1:] + arg_parts
+
+      if cmd_base in {'npx', 'pnpm', 'bunx', 'yarn', 'npm'}:
+        package_token = first_non_flag([t for t in combined if t not in {'exec', 'dlx', 'mcp'}])
+        if package_token and '<redacted>' not in package_token.lower():
+          return f'MCP server from `{package_token}` package.'
+        return f'Local MCP server `{name}` launched via `{cmd_base}`.'
+
+      if cmd_base.startswith('python'):
+        if '-m' in arg_parts:
+          idx = arg_parts.index('-m')
+          if idx + 1 < len(arg_parts):
+            module_name = arg_parts[idx + 1]
+            return f'Python MCP module `{module_name}`.'
+        script = first_non_flag(arg_parts)
+        if script:
+          return f'Python MCP server via `{Path(script).name}`.'
+        return 'Python MCP server.'
+
+      if cmd.startswith('/') or '/' in cmd:
+        script_name = Path(cmd).name
+        parent = Path(cmd).parent.name
+        if parent and parent != '.':
+          return f'Local MCP wrapper script `{parent}/{script_name}`.'
+        return f'Local MCP executable `{script_name}`.'
+
+      return f'MCP server executable `{cmd}`.'
+
+  return f'{name_phrase.title()} MCP integration for specialized tooling.'
+
+def collect_entries_for_file(label: str, rel: str, file_path: Path) -> list[tuple[str, str, str]]:
+  # Returns rows as (artifact_name, summary, source_rel_path)
+  if label == 'Plugins':
+    marketplace_entries = plugin_entries_from_marketplace(file_path)
+    if marketplace_entries:
+      return [(name, summary, rel) for name, summary in marketplace_entries]
+
+  artifact_name = artifact_name_from_rel(label, rel)
+  summary = file_summary(file_path)
+  return [(artifact_name, summary, rel)]
 
 def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
   config_path = repo / 'opencode.public.json'
@@ -1204,7 +1391,7 @@ def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
 sections: list[str] = []
 
 for label, dirs, suffixes in TARGETS:
-  collected: list[tuple[str, str]] = []
+  collected_by_name: dict[str, tuple[str, str]] = {}
   seen = set()
   for d in dirs:
     folder = REPO / d
@@ -1215,14 +1402,23 @@ for label, dirs, suffixes in TARGETS:
       if rel in seen:
         continue
       seen.add(rel)
-      collected.append((rel, file_summary(file_path)))
 
-  if not collected:
+      for artifact_name, summary, source_rel in collect_entries_for_file(label, rel, file_path):
+        previous = collected_by_name.get(artifact_name)
+        if previous is None or summary_score(summary) > summary_score(previous[1]):
+          collected_by_name[artifact_name] = (source_rel, summary)
+
+  if not collected_by_name:
     continue
 
+  collected = sorted(collected_by_name.items(), key=lambda item: item[0].lower())
   sections.append(f'- **{label}**')
-  for rel, summary in collected:
-    sections.append(f'  - `{rel}` - {summary}')
+  summary_mode = SUMMARY_MODE_BY_SECTION.get(label, 'with_summary')
+  for artifact_name, (rel, summary) in collected:
+    if summary_mode == 'name_only':
+      sections.append(f'  - `{artifact_name}`')
+    else:
+      sections.append(f'  - `{artifact_name}` - {summary}')
 
 if not sections:
   sections = ['- No publishable artifacts were found in the default categories.']

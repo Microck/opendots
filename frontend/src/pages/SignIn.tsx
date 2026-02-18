@@ -20,7 +20,7 @@ export default function SignIn() {
   const oauthMessage = useMemo(() => {
     if (!oauthError) return null
     if (oauthError === 'invalid_code') {
-      return 'GitHub could not complete the OAuth handshake. This is usually transient network/DNS instability. Please try again.'
+      return 'GitHub could not complete the OAuth handshake. Most commonly this means GitHub OAuth credentials (client ID/secret/callback URL) do not match. It can also be transient network instability. Please retry, and if it persists, verify OAuth app settings.'
     }
     return `GitHub sign-in failed (${oauthError}). Please try again.`
   }, [oauthError])

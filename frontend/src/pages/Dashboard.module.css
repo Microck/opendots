@@ -336,14 +336,15 @@
 
 .bundleCard {
   position: relative;
-  border: 1px solid var(--border-light);
-  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--card-border-custom, var(--border-light));
+  background: var(--card-bg-custom, rgba(0, 0, 0, 0.25));
   overflow: hidden;
-  transition: border-color 0.3s;
+  transition: border-color 0.3s, background-color 0.3s;
 }
 
 .bundleCard:hover {
-  border-color: rgba(var(--accent-rgb, 128, 220, 255), 0.5);
+  border-color: var(--card-border-hover-custom, rgba(var(--accent-rgb, 128, 220, 255), 0.5));
+  background: var(--card-bg-hover-custom, var(--card-bg-custom, rgba(0, 0, 0, 0.25)));
 }
 
 /* Accent bar — left edge */
@@ -393,7 +394,7 @@
   font-size: 1rem;
   font-weight: 400;
   letter-spacing: 0.04em;
-  color: var(--text-main);
+  color: var(--card-title-custom, var(--text-main));
   margin: 0;
   line-height: 1.2;
 }
@@ -501,15 +502,15 @@
   gap: 4px;
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  color: var(--text-dim);
+  color: var(--card-muted-custom, var(--text-dim));
   text-decoration: none;
   transition: color 0.2s;
 }
-.cardRepo:hover { color: rgba(128, 220, 255, 0.9); }
+.cardRepo:hover { color: var(--card-chip-text-custom, rgba(128, 220, 255, 0.9)); }
 
 .cardSummary {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--card-text-custom, var(--text-muted));
   line-height: 1.45;
   margin: 0;
   display: -webkit-box;
@@ -525,17 +526,17 @@
   align-items: center;
 }
 
-.cardTagIcon { color: var(--text-dim); flex-shrink: 0; }
+.cardTagIcon { color: var(--card-muted-custom, var(--text-dim)); flex-shrink: 0; }
 
 .cardTag {
   padding: 2px 8px;
-  border: 1px solid rgba(var(--accent-rgb, 128, 220, 255), 0.2);
-  background: rgba(var(--accent-rgb, 128, 220, 255), 0.04);
+  border: 1px solid var(--card-chip-border-custom, rgba(var(--accent-rgb, 128, 220, 255), 0.2));
+  background: var(--card-chip-bg-custom, rgba(var(--accent-rgb, 128, 220, 255), 0.04));
   font-family: var(--font-mono);
   font-size: 0.6rem;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(var(--accent-rgb, 128, 220, 255), 0.7);
+  color: var(--card-chip-text-custom, rgba(var(--accent-rgb, 128, 220, 255), 0.7));
 }
 
 /* ── Card footer ────────────────────────────────────────────────── */
@@ -546,7 +547,7 @@
   align-items: center;
   margin-top: auto;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid color-mix(in srgb, var(--card-border-custom, var(--border-light)) 45%, transparent);
 }
 
 .cardMeta {
@@ -561,7 +562,7 @@
   gap: 4px;
   font-family: var(--font-mono);
   font-size: 0.65rem;
-  color: var(--text-dim);
+  color: var(--card-muted-custom, var(--text-dim));
 }
 
 .cardActions {
@@ -577,15 +578,15 @@
   height: 32px;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-dim);
+  color: var(--card-muted-custom, var(--text-dim));
   cursor: pointer;
   transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
 
 .actionBtn:hover {
-  color: var(--text-main);
-  border-color: var(--border-light);
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--card-title-custom, var(--text-main));
+  border-color: var(--card-border-hover-custom, var(--border-light));
+  background: color-mix(in srgb, var(--card-bg-hover-custom, var(--bg-card)) 72%, transparent);
 }
 
 .actionBtn:focus-visible {

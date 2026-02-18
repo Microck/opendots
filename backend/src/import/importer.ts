@@ -470,15 +470,12 @@ function extractAccentColorFromSnapshot(zipPath: string, fileIndex: FileIndexEnt
       continue;
     }
 
-    const rawPrimary = getThemePrimary(parsedTheme);
-    if (!rawPrimary) {
+    const resolvedPrimary = getThemePrimary(parsedTheme);
+    if (!resolvedPrimary) {
       continue;
     }
 
-    const normalizedColor = normalizeHexColor(rawPrimary);
-    if (normalizedColor) {
-      return normalizedColor;
-    }
+    return resolvedPrimary;
   }
 
   return null;
@@ -524,17 +521,65 @@ function parseThemeJson(content: string): Record<string, unknown> | null {
   return null;
 }
 
-function getThemePrimary(theme: Record<string, unknown>): string | null {
-  const directPrimary = theme.primary;
-  if (typeof directPrimary === 'string') {
-    return directPrimary;
+function resolveThemeColorToken(theme: Record<string, unknown>, value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
   }
 
-  const colors = theme.colors;
-  if (colors && typeof colors === 'object') {
-    const nestedPrimary = (colors as Record<string, unknown>).primary;
-    if (typeof nestedPrimary === 'string') {
-      return nestedPrimary;
+  const directHex = normalizeHexColor(value);
+  if (directHex) {
+    return directHex;
+  }
+
+  const defs = theme.defs;
+  if (!defs || typeof defs !== 'object') {
+    return null;
+  }
+
+  const resolved = (defs as Record<string, unknown>)[value];
+  if (typeof resolved !== 'string') {
+    return null;
+  }
+
+  return normalizeHexColor(resolved);
+}
+
+function getThemePrimary(theme: Record<string, unknown>): string | null {
+  const candidateContainers: unknown[] = [
+    theme.primary,
+    theme.colors && typeof theme.colors === 'object'
+      ? (theme.colors as Record<string, unknown>).primary
+      : null,
+    theme.theme && typeof theme.theme === 'object'
+      ? (theme.theme as Record<string, unknown>).primary
+      : null,
+    theme.theme && typeof theme.theme === 'object'
+      ? (theme.theme as Record<string, unknown>).accent
+      : null,
+  ];
+
+  for (const candidate of candidateContainers) {
+    if (!candidate) {
+      continue;
+    }
+
+    if (typeof candidate === 'string') {
+      const resolved = resolveThemeColorToken(theme, candidate);
+      if (resolved) {
+        return resolved;
+      }
+      continue;
+    }
+
+    if (typeof candidate === 'object') {
+      const palette = candidate as Record<string, unknown>;
+      const preferred = [palette.dark, palette.light, palette.default, palette.primary, palette.accent];
+      for (const value of preferred) {
+        const resolved = resolveThemeColorToken(theme, value);
+        if (resolved) {
+          return resolved;
+        }
+      }
     }
   }
 

@@ -127,13 +127,45 @@ function normalizeArtifactName(reference: string): string {
     'prompts',
   ]
 
+  const bucketFolders = new Set([
+    'agents',
+    'agent',
+    'commands',
+    'command',
+    'skills',
+    'themes',
+    'tools',
+    'modes',
+    'rules',
+    'prompts',
+    'plugins',
+    'disabled-plugins',
+    '.opencode',
+    'reference',
+    'references',
+    'docs',
+    'examples',
+  ])
+
   const categoryIndex = lowerSegments.findIndex((segment) => categoryFolders.includes(segment))
   if (categoryIndex >= 0 && categoryIndex + 1 < segments.length) {
-    const candidate = segments[categoryIndex + 1]
-    if (!candidate.includes('.')) {
+    for (let i = categoryIndex + 1; i < segments.length; i += 1) {
+      const candidate = segments[i]
+      const candidateLower = candidate.toLowerCase()
+
+      if (candidate.includes('.')) {
+        continue
+      }
+
+      if (bucketFolders.has(candidateLower) && i + 1 < segments.length) {
+        continue
+      }
+
       return candidate
     }
-    return stripExtension(candidate)
+
+    const fallback = segments[segments.length - 1] ?? cleaned
+    return stripExtension(fallback)
   }
 
   const last = segments[segments.length - 1] ?? cleaned
@@ -166,7 +198,7 @@ function parseOverviewSections(sectionContent: string): OverviewSection[] {
       continue
     }
 
-    const itemMatch = line.match(/^\s*-\s+(?:`([^`]+)`|([^`-][^-]*?))\s*-\s*(.+)$/)
+    const itemMatch = line.match(/^\s*-\s+(?:`([^`]+)`|([^`-][^-]*?))(?:\s*-\s*(.+))?$/)
     if (!itemMatch) {
       continue
     }
@@ -771,11 +803,13 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                                   <>
                                     <ul className={styles.overviewList}>
                                       {visibleItems.map((item) => (
-                                        <li key={item.id} className={styles.overviewListItem}>
-                                          <div className={styles.overviewItemName}>{item.name}</div>
-                                          <p className={styles.overviewItemSummary}>{item.summary}</p>
-                                        </li>
-                                      ))}
+                                    <li key={item.id} className={styles.overviewListItem}>
+                                      <div className={styles.overviewItemName}>{item.name}</div>
+                                      {item.summary ? (
+                                        <p className={styles.overviewItemSummary}>{item.summary}</p>
+                                      ) : null}
+                                    </li>
+                                  ))}
                                     </ul>
 
                                     {hasMore && (

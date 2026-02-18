@@ -28,6 +28,31 @@ const spring = { type: 'spring' as const, stiffness: 120, damping: 20 }
 const springGentle = { type: 'spring' as const, stiffness: 80, damping: 22 }
 const easeCurve = [0.25, 0.46, 0.45, 0.94] as const
 
+function formatClaimExpiry(expiresAt: string, nowMs: number): string {
+  const targetMs = Date.parse(expiresAt)
+  if (Number.isNaN(targetMs)) {
+    return 'unknown'
+  }
+
+  const remainingMs = targetMs - nowMs
+  const absoluteTime = new Date(targetMs).toLocaleTimeString()
+  if (remainingMs <= 0) {
+    return `expired at ${absoluteTime}`
+  }
+
+  const totalSeconds = Math.ceil(remainingMs / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+
+  const parts: string[] = []
+  if (hours > 0) parts.push(`${hours}h`)
+  if (minutes > 0 || hours > 0) parts.push(`${minutes}m`)
+  parts.push(`${seconds}s`)
+
+  return `in ${parts.join(' ')} (${absoluteTime})`
+}
+
 /* ── Text scramble component ────────────────────────────────────── */
 function ScrambleReveal({
   text,
@@ -115,6 +140,7 @@ export default function Home({ isLoggedIn }: HomeProps) {
     claimFilePath: string
     expiresAt: string
   } | null>(null)
+  const [claimNowMs, setClaimNowMs] = useState(() => Date.now())
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [captchaNonce, setCaptchaNonce] = useState(0)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
@@ -201,6 +227,10 @@ export default function Home({ isLoggedIn }: HomeProps) {
       `Claim code: ${claimResult.claimCode}`,
     ].join('\n')
   }, [claimResult])
+  const claimExpiryLabel = useMemo(() => {
+    if (!claimResult) return ''
+    return formatClaimExpiry(claimResult.expiresAt, claimNowMs)
+  }, [claimResult, claimNowMs])
   const fullPublishProtocolPrompt = [
     `Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`,
     '',
@@ -227,6 +257,21 @@ export default function Home({ isLoggedIn }: HomeProps) {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (!claimResult) {
+      return
+    }
+
+    setClaimNowMs(Date.now())
+    const intervalId = window.setInterval(() => {
+      setClaimNowMs(Date.now())
+    }, 1000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [claimResult])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -622,7 +667,7 @@ export default function Home({ isLoggedIn }: HomeProps) {
                   </button>
                 </ClickSpark>
                 <span className={styles.publishExpires}>
-                  Expires: {new Date(claimResult.expiresAt).toLocaleTimeString()}
+                  Expires: {claimExpiryLabel}
                 </span>
               </div>
             )}

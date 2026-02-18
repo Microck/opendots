@@ -47,7 +47,10 @@ Then regenerate README overview content by running Step 4.6 from `PUBLISH.md`.
 Current behavior:
 
 - Skills/Commands/Agents/Themes/Tools are emitted as name-only entries (cleaner for large bundles).
-- Plugins and MCP Servers keep purpose-focused summaries.
+- Plugins keep purpose-focused summaries.
+  - Registry files like `plugins/**/marketplace.json` are summarized as registries (they are NOT installed plugins).
+- MCP Servers keep purpose-focused summaries.
+  - If any MCP entry is still generic, add an override in `mcp.descriptions.json` and re-run Step 4.6.
 
 Fetch and inspect Step 4.6 (avoid brittle line numbers):
 
@@ -57,6 +60,13 @@ awk '/^## Step 4\.6/{flag=1} /^## Step 4\.7/{if(flag){exit}} flag{print}' /tmp/o
 ```
 
 Run the `python3 - <<'PY'` block from Step 4.6 in your repo root.
+
+If Step 4.6 produces any MCP line that asks you to "Add an entry to `mcp.descriptions.json`":
+
+1) Create/update `mcp.descriptions.json` in the repo root as a JSON object mapping MCP name -> description.
+2) Re-run Step 4.6.
+
+This is the intended workflow: OpenCode MCP configs usually do not include descriptive text.
 
 Then run the Step 4.7 quality gate from `PUBLISH.md`.
 
@@ -72,7 +82,7 @@ awk '/^## Step 4\.7/{flag=1} /^## Step 5/{if(flag){exit}} flag{print}' /tmp/open
 From your repo root:
 
 ```bash
-git add -- README.md opendots.yml opencode.public.json
+git add -- README.md opendots.yml opencode.public.json mcp.descriptions.json 2>/dev/null || true
 git add -- AGENTS.md CLAUDE.md agents agent command commands skills themes plugins disabled-plugins tools prompts modes scripts 2>/dev/null || true
 
 git commit -m "chore: update OpenDots bundle"

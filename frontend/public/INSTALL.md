@@ -113,8 +113,16 @@ Then ask for explicit approval to continue.
 
 Ask user:
 
-1. `PROJECT` - install into current project
-2. `GLOBAL` - install into `~/.config/opencode/`
+1. `PROJECT` - install into the current project under `.opencode/` (OpenCode per-project config)
+2. `GLOBAL` - install into `~/.config/opencode/` (OpenCode global config)
+
+Set these variables:
+
+```bash
+# Set exactly one
+INSTALL_SCOPE="project"   # or "global"
+VARIANT="$INSTALL_SCOPE"  # used in the download URL
+```
 
 Set download variant accordingly:
 
@@ -126,7 +134,7 @@ Set download variant accordingly:
 ## Step 4 - Download ZIP
 
 ```bash
-curl -fsSL "$OPENDOTS_API_BASE/api/bundles/{IDENTIFIER}/download?variant={project|global}" -o /tmp/opendots-bundle.zip
+curl -fsSL "$OPENDOTS_API_BASE/api/bundles/{IDENTIFIER}/download?variant=$VARIANT" -o /tmp/opendots-bundle.zip
 file /tmp/opendots-bundle.zip
 ```
 
@@ -146,6 +154,39 @@ Confirm:
 - no path traversal (`..`)
 - file list matches metadata expectations
 
+Project install note:
+
+- OpenCode loads per-project config from `.opencode/`.
+- Some bundles ship files already nested under `.opencode/`.
+- Others ship category folders at the zip root (e.g. `skills/`, `plugins/`).
+
+Before extracting to a project, determine the project target directory:
+
+```bash
+# If the zip already contains .opencode/, extract into project root.
+# Otherwise extract into .opencode/.
+
+if command -v rg >/dev/null 2>&1; then
+  ZIP_HAS_DOT_OPENCODE=$(unzip -l /tmp/opendots-bundle.zip | awk 'NR>3 && !/\/$/ && $NF!="" {print $NF}' | rg -m 1 '^\.opencode/' >/dev/null 2>&1 && echo "yes" || echo "no")
+else
+  ZIP_HAS_DOT_OPENCODE=$(unzip -l /tmp/opendots-bundle.zip | awk 'NR>3 && !/\/$/ && $NF!="" {print $NF}' | grep -E -m 1 '^\.opencode/' >/dev/null 2>&1 && echo "yes" || echo "no")
+fi
+
+if [ "$ZIP_HAS_DOT_OPENCODE" = "yes" ]; then
+  PROJECT_TARGET_DIR="."
+else
+  PROJECT_TARGET_DIR=".opencode"
+fi
+
+echo "PROJECT_TARGET_DIR=$PROJECT_TARGET_DIR"
+
+if [ "${INSTALL_SCOPE:-}" = "global" ] && [ "$ZIP_HAS_DOT_OPENCODE" = "yes" ]; then
+  echo "WARNING: This ZIP contains .opencode/ (project-scoped layout)."
+  echo "Recommended: abort GLOBAL install and choose PROJECT install instead."
+  echo "If you continue anyway, OpenCode will not load files under ~/.config/opencode/.opencode/."
+fi
+```
+
 Abort if suspicious.
 
 ---
@@ -155,9 +196,18 @@ Abort if suspicious.
 Detect conflicts before extracting.
 
 ```bash
-# project target
+# project target (uses PROJECT_TARGET_DIR from Step 5)
+if [ -z "${PROJECT_TARGET_DIR:-}" ]; then
+  echo "PROJECT_TARGET_DIR is not set. Run the detection snippet in Step 5 first."
+  exit 1
+fi
+
 unzip -l /tmp/opendots-bundle.zip | awk 'NR>3 && !/\/$/ && $NF!="" {print $NF}' | while read f; do
-  [ -f "./$f" ] && echo "CONFLICT: ./$f"
+  if [ "$PROJECT_TARGET_DIR" = "." ]; then
+    [ -f "./$f" ] && echo "CONFLICT: ./$f"
+  else
+    [ -f "$PROJECT_TARGET_DIR/$f" ] && echo "CONFLICT: $PROJECT_TARGET_DIR/$f"
+  fi
 done
 
 # global target
@@ -185,7 +235,17 @@ cp "{file}" "{file}.opendots-backup.$(date +%Y%m%d%H%M%S)"
 ```bash
 # project
 cd {project-root}
-unzip -o /tmp/opendots-bundle.zip
+
+if [ -z "${PROJECT_TARGET_DIR:-}" ]; then
+  echo "PROJECT_TARGET_DIR is not set. Run the detection snippet in Step 5 first."
+  exit 1
+fi
+
+if [ "$PROJECT_TARGET_DIR" != "." ]; then
+  mkdir -p "$PROJECT_TARGET_DIR"
+fi
+
+unzip -o /tmp/opendots-bundle.zip -d "$PROJECT_TARGET_DIR"
 
 # global
 mkdir -p ~/.config/opencode
@@ -213,10 +273,21 @@ Find placeholders in the installed files:
 
 ```bash
 # project scope
-rg -n "<REDACTED" . 2>/dev/null || true
+if command -v rg >/dev/null 2>&1; then
+  if [ -n "${PROJECT_TARGET_DIR:-}" ]; then
+    rg -n "<REDACTED" "$PROJECT_TARGET_DIR" 2>/dev/null || true
+  fi
 
-# global scope
-rg -n "<REDACTED" "$HOME/.config/opencode" 2>/dev/null || true
+  # global scope
+  rg -n "<REDACTED" "$HOME/.config/opencode" 2>/dev/null || true
+else
+  if [ -n "${PROJECT_TARGET_DIR:-}" ]; then
+    grep -RIn "<REDACTED" "$PROJECT_TARGET_DIR" 2>/dev/null || true
+  fi
+
+  # global scope
+  grep -RIn "<REDACTED" "$HOME/.config/opencode" 2>/dev/null || true
+fi
 ```
 
 If `opencode.public.json` is present:
@@ -236,13 +307,26 @@ If the agent is assisting you:
 
 ```bash
 # quick checks
-ls -la themes/ 2>/dev/null || true
-ls -la agent/ agents/ 2>/dev/null || true
-ls -la commands/ 2>/dev/null || true
-ls -la skills/ 2>/dev/null || true
-ls -la plugins/ 2>/dev/null || true
-ls -la prompts/ 2>/dev/null || true
-ls -la opendots.yml opencode.public.json 2>/dev/null || true
+
+# project scope (requires PROJECT_TARGET_DIR)
+if [ -n "${PROJECT_TARGET_DIR:-}" ]; then
+  ls -la "$PROJECT_TARGET_DIR"/themes/ 2>/dev/null || true
+  ls -la "$PROJECT_TARGET_DIR"/agent/ "$PROJECT_TARGET_DIR"/agents/ 2>/dev/null || true
+  ls -la "$PROJECT_TARGET_DIR"/commands/ 2>/dev/null || true
+  ls -la "$PROJECT_TARGET_DIR"/skills/ 2>/dev/null || true
+  ls -la "$PROJECT_TARGET_DIR"/plugins/ 2>/dev/null || true
+  ls -la "$PROJECT_TARGET_DIR"/prompts/ 2>/dev/null || true
+fi
+
+# global scope
+ls -la "$HOME/.config/opencode/themes/" 2>/dev/null || true
+ls -la "$HOME/.config/opencode/agent/" "$HOME/.config/opencode/agents/" 2>/dev/null || true
+ls -la "$HOME/.config/opencode/commands/" 2>/dev/null || true
+ls -la "$HOME/.config/opencode/skills/" 2>/dev/null || true
+ls -la "$HOME/.config/opencode/plugins/" 2>/dev/null || true
+
+# metadata files might be present depending on bundle layout
+ls -la opendots.yml opencode.public.json mcp.descriptions.json 2>/dev/null || true
 ```
 
 Optional validation:
@@ -282,7 +366,7 @@ To update later:
 - `agent` -> `agent/` or `agents/`
 - `command` -> `commands/`
 - `skill` -> `skills/`
-- `plugin` -> `plugins/` and `disabled-plugins/`
+- `plugin` -> `plugins/` and `disabled-plugins/` (or under `.opencode/` for project installs)
 - `tool` -> `tools/`
 - `prompt` -> `prompts/`
 - `mode` -> `modes/`

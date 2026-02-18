@@ -118,6 +118,7 @@ Allowed directories (copy if present):
 Allowed root files (copy if present and safe):
 
 - `AGENTS.md`, `CLAUDE.md`
+- `mcp.descriptions.json` (optional) - human-readable MCP summaries used by README generation
 
 MCPs are useful and can be published, but ONLY in a sanitized form.
 
@@ -959,8 +960,31 @@ Important: this pass must read each source file in full before summarizing. Do n
 Coverage requirements for this step:
 
 - MCP entries must use server names (for example `kagi-search`) with purpose-focused summaries.
-- Plugin registries like `plugins/**/marketplace.json` must expand to individual plugin names (not just `marketplace` or `agents`).
-- If MCP descriptions are still generic, add `description` fields in `opencode.public.json` and re-run this step.
+- Plugin registries like `plugins/**/marketplace.json` must NOT be treated as installed plugins.
+  - Summarize registry files as registries (include entry count when possible).
+  - Installed plugin artifacts are the files under `plugins/` or `.opencode/plugins/`.
+- If MCP descriptions are still generic after this step, create/update `mcp.descriptions.json` and re-run this step.
+  - `opencode.public.json` follows the OpenCode config schema and does not reliably support inline descriptions.
+
+How to write good MCP descriptions (AI workflow):
+
+- Describe the *capability*, not the implementation (avoid "launched via npx").
+- Use 1 sentence that answers: "What can I do with this MCP?" and include 3-6 example actions.
+- Evidence sources to use, in order:
+  - `opencode.public.json`: `type`, `url`, and `command` tokens
+  - Local wrapper scripts referenced by `command` (read the file and summarize what it controls)
+  - If it is an `npx`/`bun x` package and still unclear: look up the package README and summarize what tools it exposes
+
+Override format:
+
+Create `mcp.descriptions.json` in the repo root:
+
+```json
+{
+  "discord-py-self": "Control a Discord account: read/send messages, manage channels/roles, and interact with components.",
+  "ssh-nas": "Run commands over SSH on a NAS host: execute shell commands, use sudo, and fetch diagnostics for ops workflows."
+}
+```
 
 Run from repo root:
 
@@ -981,31 +1005,24 @@ END_MARKER = '<!-- OPENDOTS_AUTO_CONTENTS_END -->'
 
 TARGETS = [
   ('Skills', ['skills', '.opencode/skills'], {'.md', '.txt'}),
-  ('Plugins', ['plugins', '.opencode/plugins', 'disabled-plugins', '.opencode/disabled-plugins'], {'.json', '.jsonc', '.md', '.txt'}),
+  # Plugins can be JS/TS code, JSON manifests, or extensionless JSON files.
+  # Include "" to capture extensionless plugin manifest files.
+  ('Plugins', ['plugins', '.opencode/plugins', 'disabled-plugins', '.opencode/disabled-plugins'], {'.json', '.jsonc', '.md', '.txt', '.js', '.ts', '.mjs', '.cjs', '.py', '.sh', ''}),
   ('Commands', ['commands', '.opencode/commands', 'command'], {'.md', '.txt', '.json', '.jsonc'}),
   ('Agents', ['agents', '.opencode/agents', 'agent'], {'.md', '.txt', '.json', '.jsonc'}),
   ('Themes', ['themes', '.opencode/themes'], {'.json', '.jsonc', '.md'}),
   ('Tools', ['tools', '.opencode/tools'], {'.json', '.jsonc', '.md', '.txt'}),
 ]
 
-KNOWN_MCP_SUMMARIES = {
-  'agent-browser-mcp': 'Browser automation MCP for interactive browsing, screenshots, and page actions.',
-  'kagi-search': 'Private web search MCP for high-quality, ad-free search results.',
-  'context7': 'Library and framework docs MCP for up-to-date API references and examples.',
-  'github': 'GitHub MCP for repository, issue, PR, and workflow operations.',
-  'qmd': 'Local markdown knowledge search MCP for indexed notes and docs.',
-  'vercel': 'Vercel MCP for deployments, logs, and project/runtime diagnostics.',
-  'browser-use': 'Browser automation MCP for navigation, screenshots, and extraction.',
-  'perplexity-webui': 'Perplexity research MCP for live web answers and deep research.',
-  'stitch': 'Stitch UI generation MCP for project/screen creation and editing.',
-}
-
 GENERIC_SUMMARY_PHRASES = (
   'definition file.',
   'definition.',
   'integration for specialized tooling',
-  'mcp server powered by `npx`',
-  'mcp server powered by `node`',
+  'local mcp server',
+  'python mcp server',
+  'mcp server executable',
+  'mcp server from',
+  'mcp endpoint hosted on',
 )
 
 ROOT_FOLDERS = {
@@ -1257,65 +1274,128 @@ def compact_summary(text: str, max_len: int = 220) -> str:
     return t
   return t[:max_len - 1].rstrip() + '…'
 
-def plugin_entries_from_marketplace(path: Path) -> list[tuple[str, str]]:
+def plugin_registry_info(path: Path) -> tuple[int, list[str]]:
+  """Return (count, sample_names) for marketplace-like registries.
+
+  A registry file is not an installed plugin.
+  """
   if path.suffix.lower() not in {'.json', '.jsonc'}:
-    return []
+    return (0, [])
 
   text = read_text(path)
   try:
     data = json.loads(text)
   except Exception:
-    return []
+    return (0, [])
 
   if not isinstance(data, dict):
-    return []
+    return (0, [])
 
   plugins = data.get('plugins')
   if not isinstance(plugins, list) or not plugins:
-    return []
+    return (0, [])
 
-  entries: list[tuple[str, str]] = []
+  names: list[str] = []
   for plugin in plugins:
     if not isinstance(plugin, dict):
       continue
-
     raw_name = plugin.get('name') or plugin.get('id') or plugin.get('slug')
-    if not isinstance(raw_name, str) or not raw_name.strip():
+    if isinstance(raw_name, str) and raw_name.strip():
+      names.append(raw_name.strip())
+
+  names = [n for n in names if n]
+  sample = names[:3]
+  return (len(plugins), sample)
+
+def is_plugin_registry_file(path: Path) -> bool:
+  return path.name.lower() in {'marketplace.json', 'marketplace.jsonc'}
+
+def load_mcp_description_overrides(repo: Path) -> dict[str, str]:
+  """Optional overrides for MCP descriptions.
+
+  File format: JSON object mapping MCP name -> description.
+  Example:
+  {
+    "discord-py-self": "Control a Discord user account: read/send messages, manage channels/roles, and interact with components."
+  }
+  """
+  candidates = [repo / 'mcp.descriptions.json', repo / '.opencode' / 'mcp.descriptions.json']
+  for candidate in candidates:
+    if not candidate.exists() or not candidate.is_file():
       continue
+    try:
+      data = json.loads(candidate.read_text(encoding='utf-8', errors='replace'))
+    except Exception:
+      continue
+    if not isinstance(data, dict):
+      continue
+    out: dict[str, str] = {}
+    for k, v in data.items():
+      if not isinstance(k, str) or not isinstance(v, str):
+        continue
+      if not k.strip() or not v.strip():
+        continue
+      out[normalize_name(k)] = compact_summary(v, 220)
+    if out:
+      return out
+  return {}
 
-    name = raw_name.strip()
-    desc = plugin.get('description') or plugin.get('summary') or plugin.get('purpose')
-    if isinstance(desc, str) and desc.strip():
-      summary = compact_summary(desc, 220)
-    else:
-      summary = 'Plugin entry from marketplace registry.'
+def guess_capabilities_from_tokens(tokens: set[str]) -> str:
+  """Heuristic capability phrases derived from names/command/url.
 
-    entries.append((name, summary))
+  Keep this broad and evidence-based. If unsure, return empty string and let
+  the agent add an override in mcp.descriptions.json.
+  """
+  # Prefer specific integrations first.
+  if 'discord' in tokens:
+    return 'Control a Discord account: read/send messages, manage channels/roles, and interact with components.'
+  if 'ssh' in tokens:
+    return 'Run commands on remote machines over SSH (optionally with sudo), useful for ops and debugging.'
+  if 'vercel' in tokens:
+    return 'Deploy and inspect Vercel projects: deployments, build/runtime logs, and project settings.'
+  if 'supabase' in tokens or 'postgres' in tokens:
+    return 'Work with Supabase/Postgres: manage projects and run database-related operations.'
+  if 'aws' in tokens or 'ec2' in tokens:
+    return 'Manage AWS resources (commonly EC2): instance status, start/stop, and related automation.'
+  if 'kagi' in tokens or 'search' in tokens:
+    return 'Perform web search and return structured results for research and verification.'
+  if 'perplexity' in tokens:
+    return 'Run web research queries and return sourced answers (fast lookup and deep research modes).'
+  if 'context7' in tokens or 'docs' in tokens:
+    return 'Fetch up-to-date library/framework docs and code examples for accurate API usage.'
+  if 'n8n' in tokens:
+    return 'Interact with n8n: search nodes/templates and manage workflows/executions via API.'
+  if 'stitch' in tokens or 'ui' in tokens:
+    return 'Generate/edit UI screens and variants (design-to-code workflow) through Stitch.'
+  if 'grep' in tokens:
+    return 'Search files using patterns/regex and return matches with context for codebase exploration.'
+  return ''
 
-  return entries
-
-def guess_mcp_summary(name: str, cfg: object) -> str:
+def guess_mcp_summary(name: str, cfg: object, repo: Path, overrides: dict[str, str]) -> str:
   normalized = normalize_name(name)
-  known = KNOWN_MCP_SUMMARIES.get(normalized)
-  if known:
-    return known
+  override = overrides.get(normalized)
+  if override:
+    return override
 
   words = [w for w in re.split(r'[-_]+', normalized) if w and w != 'mcp']
   name_phrase = ' '.join(words) if words else name
 
   if isinstance(cfg, dict):
     if cfg.get('enabled') is False:
-      return 'MCP server is configured but disabled by default.'
+      return 'Configured but disabled by default.'
 
-    for key in ('description', 'summary', 'purpose', 'title'):
-      v = cfg.get(key)
-      if isinstance(v, str) and v.strip():
-        return compact_summary(v, 180)
+    # OpenCode MCP configs do not reliably have human descriptions.
+    # Prefer local wrapper files or agent-provided overrides.
 
     url = cfg.get('url')
     if isinstance(url, str) and url.strip():
       host = re.sub(r'^https?://', '', url.strip()).split('/')[0]
-      return f'{name_phrase.title()} MCP endpoint hosted on `{host}`.'
+      tokens = set(words)
+      tokens.add(host.split(':')[0].split('.')[0].lower())
+      cap = guess_capabilities_from_tokens(tokens)
+      if cap:
+        return cap
+      return f'Remote MCP endpoint hosted on `{host}`.'
 
     cmd_parts = command_tokens(cfg.get('command'))
     cmd = cmd_parts[0] if cmd_parts else ''
@@ -1326,11 +1406,31 @@ def guess_mcp_summary(name: str, cfg: object) -> str:
       cmd_base = Path(cmd).name.lower()
       combined = cmd_parts[1:] + arg_parts
 
+      # If the command references a local file inside this repo, summarize that file.
+      maybe_paths = [t for t in combined if isinstance(t, str) and (t.startswith('./') or t.startswith('/') or '/' in t)]
+      for p in maybe_paths:
+        candidate = (repo / p).resolve() if p.startswith('./') else Path(p)
+        try:
+          if candidate.exists() and candidate.is_file() and repo in candidate.resolve().parents:
+            summary = file_summary(candidate)
+            if summary:
+              return summary
+        except Exception:
+          pass
+
       if cmd_base in {'npx', 'pnpm', 'bunx', 'yarn', 'npm'}:
         package_token = first_non_flag([t for t in combined if t not in {'exec', 'dlx', 'mcp'}])
+        tokens = set(words)
         if package_token and '<redacted>' not in package_token.lower():
-          return f'MCP server from `{package_token}` package.'
-        return f'Local MCP server `{name}` launched via `{cmd_base}`.'
+          for part in re.split(r'[@/\s:_-]+', package_token.lower()):
+            if part:
+              tokens.add(part)
+        cap = guess_capabilities_from_tokens(tokens)
+        if cap:
+          return cap
+        if package_token and '<redacted>' not in package_token.lower():
+          return f'MCP tools from `{package_token}` (launched via `{cmd_base}`). Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
+        return f'Local MCP server `{name}` launched via `{cmd_base}`. Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
 
       if cmd_base.startswith('python'):
         if '-m' in arg_parts:
@@ -1341,31 +1441,47 @@ def guess_mcp_summary(name: str, cfg: object) -> str:
         script = first_non_flag(arg_parts)
         if script:
           return f'Python MCP server via `{Path(script).name}`.'
-        return 'Python MCP server.'
+        tokens = set(words)
+        tokens.add('python')
+        cap = guess_capabilities_from_tokens(tokens)
+        if cap:
+          return cap
+        return 'Python MCP server. Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
 
       if cmd.startswith('/') or '/' in cmd:
         script_name = Path(cmd).name
         parent = Path(cmd).parent.name
         if parent and parent != '.':
-          return f'Local MCP wrapper script `{parent}/{script_name}`.'
-        return f'Local MCP executable `{script_name}`.'
+          return f'Local MCP wrapper `{parent}/{script_name}`. Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
+        return f'Local MCP executable `{script_name}`. Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
 
-      return f'MCP server executable `{cmd}`.'
+      return f'MCP server executable `{cmd}`. Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
 
-  return f'{name_phrase.title()} MCP integration for specialized tooling.'
+  cap = guess_capabilities_from_tokens(set(words))
+  if cap:
+    return cap
+  return f'{name_phrase.title()} MCP tools. Add an entry to `mcp.descriptions.json` for a purpose-focused summary.'
 
 def collect_entries_for_file(label: str, rel: str, file_path: Path) -> list[tuple[str, str, str]]:
   # Returns rows as (artifact_name, summary, source_rel_path)
   if label == 'Plugins':
-    marketplace_entries = plugin_entries_from_marketplace(file_path)
-    if marketplace_entries:
-      return [(name, summary, rel) for name, summary in marketplace_entries]
+    if is_plugin_registry_file(file_path):
+      count, sample = plugin_registry_info(file_path)
+      if count > 0:
+        parent = file_path.parent.name
+        registry_name = f'{parent} marketplace (registry)' if parent else 'marketplace (registry)'
+        sample_suffix = ''
+        if sample:
+          sample_suffix = f" Sample: {', '.join(sample)}."
+        summary = f'Plugin registry listing {count} plugins (not installed by default).{sample_suffix}'
+        return [(registry_name, summary, rel)]
 
   artifact_name = artifact_name_from_rel(label, rel)
   summary = file_summary(file_path)
   return [(artifact_name, summary, rel)]
 
 def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
+  overrides = load_mcp_description_overrides(repo)
   config_path = repo / 'opencode.public.json'
   if not config_path.exists() or not config_path.is_file():
     return []
@@ -1384,7 +1500,7 @@ def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
 
   rows: list[tuple[str, str]] = []
   for name in sorted(mcp.keys()):
-    rows.append((name, guess_mcp_summary(name, mcp.get(name))))
+    rows.append((name, guess_mcp_summary(name, mcp.get(name), repo, overrides)))
 
   return rows
 
@@ -1460,6 +1576,7 @@ repo = Path('.').resolve()
 readme = repo / 'README.md'
 config = repo / 'opendots.yml'
 public_cfg = repo / 'opencode.public.json'
+mcp_overrides = repo / 'mcp.descriptions.json'
 
 errors: list[str] = []
 warnings: list[str] = []
@@ -1470,6 +1587,23 @@ if not config.exists():
   errors.append('opendots.yml is required.')
 if not public_cfg.exists():
   errors.append('opencode.public.json is required.')
+
+if mcp_overrides.exists():
+  try:
+    import json
+
+    data = json.loads(mcp_overrides.read_text(encoding='utf-8', errors='replace'))
+    if not isinstance(data, dict) or not data:
+      errors.append('mcp.descriptions.json must be a non-empty JSON object mapping MCP name -> description.')
+    else:
+      bad = []
+      for k, v in data.items():
+        if not isinstance(k, str) or not k.strip() or not isinstance(v, str) or not v.strip():
+          bad.append(str(k))
+      if bad:
+        errors.append('mcp.descriptions.json contains invalid entries. Keys and values must be non-empty strings.')
+  except Exception:
+    errors.append('mcp.descriptions.json exists but is not valid JSON.')
 
 if readme.exists():
   text = readme.read_text(encoding='utf-8', errors='replace')
@@ -1495,10 +1629,40 @@ if readme.exists():
         'definition.',
         'could not parse mcp details',
         'integration for specialized tooling',
+        'mcp tools.',
+        'remote mcp endpoint hosted on',
+        'add an entry to `mcp.descriptions.json`',
       )
       generic_count = sum(1 for line in entry_lines if any(token in line.lower() for token in generic_patterns))
       if generic_count > max(2, len(entry_lines) // 3):
-        warnings.append('Too many generic summaries. Add better descriptions in source files.')
+        warnings.append('Too many generic summaries. Add/refresh descriptions in source files or `mcp.descriptions.json`, then re-run Step 4.6.')
+
+      # MCP summaries must be capability-focused and non-generic.
+      current_section = ''
+      section_entries: dict[str, list[str]] = {}
+      for line in lines:
+        sec = re.match(r'^- \*\*(.+?)\*\*$', line)
+        if sec:
+          current_section = sec.group(1).strip()
+          section_entries.setdefault(current_section, [])
+          continue
+        if line.startswith('- `') and current_section:
+          section_entries.setdefault(current_section, []).append(line)
+
+      mcp_lines = section_entries.get('MCP Servers', [])
+      if mcp_lines:
+        mcp_generic_tokens = (
+          'add an entry to `mcp.descriptions.json`',
+          'remote mcp endpoint hosted on',
+          'mcp server',
+          'mcp tools.',
+          'mcp server executable',
+          'python mcp server',
+          'local mcp',
+        )
+        bad_mcp = [ln for ln in mcp_lines if any(tok in ln.lower() for tok in mcp_generic_tokens)]
+        if bad_mcp:
+          errors.append('MCP summaries are still generic. Create/update `mcp.descriptions.json` and re-run Step 4.6 until MCP entries are capability-focused.')
 
 if errors:
   print('QUALITY GATE FAILED:')
@@ -1534,7 +1698,7 @@ git init
 
 # IMPORTANT: do NOT run `git add .`.
 # Add only the allowlisted bundle files. This prevents accidentally committing banned files.
-git add -- README.md opendots.yml opencode.public.json
+git add -- README.md opendots.yml opencode.public.json mcp.descriptions.json 2>/dev/null || true
 git add -- AGENTS.md CLAUDE.md agents agent command commands skills themes plugins disabled-plugins tools prompts modes scripts 2>/dev/null || true
 
 git commit -m "feat: publish OpenDots bundle"

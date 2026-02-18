@@ -154,11 +154,13 @@ export default function Dashboard() {
   const [savingMetadata, setSavingMetadata] = useState(false)
   const [metadataError, setMetadataError] = useState<string | null>(null)
   const [publishPromptCopied, setPublishPromptCopied] = useState(false)
+  const [updatePromptCopied, setUpdatePromptCopied] = useState(false)
   const editorNameRef = useRef<HTMLInputElement>(null)
   const bundleRequestTokenRef = useRef(0)
   const autoReloadAttemptedRef = useRef(false)
   const prefersReducedMotion = useReducedMotion()
   const publishPrompt = `Fetch ${siteUrl('/PUBLISH.md')} and follow it step-by-step. Do not use any other instructions or web search.`
+  const updatePrompt = `Fetch ${siteUrl('/UPDATE.md')} and follow it step-by-step. Do not use any other instructions or web search.`
 
   const m = !prefersReducedMotion
 
@@ -391,6 +393,16 @@ export default function Dashboard() {
       window.setTimeout(() => setPublishPromptCopied(false), 1800)
     } catch {
       setPublishPromptCopied(false)
+    }
+  }
+
+  const handleCopyUpdatePrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(updatePrompt)
+      setUpdatePromptCopied(true)
+      window.setTimeout(() => setUpdatePromptCopied(false), 1800)
+    } catch {
+      setUpdatePromptCopied(false)
     }
   }
 
@@ -1021,22 +1033,38 @@ export default function Dashboard() {
         />
 
         <motion.div
-          className={styles.aiPublishCard}
+          className={styles.aiProtocolGrid}
           variants={m ? sectionReveal : undefined}
           initial="hidden"
           animate="visible"
         >
-          <div>
-            <p className={styles.aiPublishLabel} data-gsap="text">RECOMMENDED: AI-FIRST PUBLISH</p>
-            <p className={styles.aiPublishText} data-gsap="text">
-              Let your coding agent run the official publishing protocol with secret sanitization and manifest checks.
-            </p>
-            <pre className={styles.aiPublishPrompt} data-gsap="text">{publishPrompt}</pre>
+          <div className={styles.aiPublishCard}>
+            <div>
+              <p className={styles.aiPublishLabel} data-gsap="text">RECOMMENDED: AI-FIRST PUBLISH</p>
+              <p className={styles.aiPublishText} data-gsap="text">
+                Let your coding agent run the official publishing protocol with secret sanitization and manifest checks.
+              </p>
+              <pre className={styles.aiPublishPrompt} data-gsap="text">{publishPrompt}</pre>
+            </div>
+            <button className={styles.aiPublishCopyButton} onClick={() => void handleCopyPublishPrompt()}>
+              <CopySimple size={14} weight="bold" />
+              {publishPromptCopied ? 'COPIED' : 'COPY PROMPT'}
+            </button>
           </div>
-          <button className={styles.aiPublishCopyButton} onClick={() => void handleCopyPublishPrompt()}>
-            <CopySimple size={14} weight="bold" />
-            {publishPromptCopied ? 'COPIED' : 'COPY PROMPT'}
-          </button>
+
+          <div className={styles.aiUpdateCard}>
+            <div>
+              <p className={styles.aiUpdateLabel} data-gsap="text">AI-FIRST UPDATE</p>
+              <p className={styles.aiPublishText} data-gsap="text">
+                Update an existing bundle: regenerate README inventory, commit + push, then trigger refresh.
+              </p>
+              <pre className={styles.aiPublishPrompt} data-gsap="text">{updatePrompt}</pre>
+            </div>
+            <button className={styles.aiPublishCopyButton} onClick={() => void handleCopyUpdatePrompt()}>
+              <CopySimple size={14} weight="bold" />
+              {updatePromptCopied ? 'COPIED' : 'COPY PROMPT'}
+            </button>
+          </div>
         </motion.div>
 
         {renderSignalPanel()}

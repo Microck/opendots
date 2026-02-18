@@ -13,10 +13,7 @@ export default function ShortShareRedirect() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!shareCode) {
-      setError('Invalid share link')
-      return
-    }
+    if (!shareCode) return
 
     const abortController = new AbortController()
 
@@ -52,6 +49,20 @@ export default function ShortShareRedirect() {
       abortController.abort()
     }
   }, [navigate, shareCode])
+
+  if (!shareCode) {
+    return (
+      <div className={styles.page}>
+        <div className="container">
+          <div className={styles.error}>
+            <h2>Share link error</h2>
+            <p>Invalid share link</p>
+            <p><Link to="/browse">Browse available bundles</Link></p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!error) {
     return (

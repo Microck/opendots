@@ -330,6 +330,34 @@ license: MIT`}
             </div>
           </motion.section>
 
+          {/* How to Update */}
+          <motion.section
+            className={styles.section}
+            variants={v(sectionReveal)}
+            initial="hidden"
+            whileInView="visible"
+            viewport={scrollViewports.once}
+          >
+            <h2 className={styles.sectionTitle}>How to Update</h2>
+            <p className={styles.paragraph}>
+              Bundles are GitHub repos. Updates are just commits: change files, regenerate the README inventory,
+              push, then trigger a refresh import.
+            </p>
+
+            <div className={styles.infoCard}>
+              <strong className="text-mono">AI-First Update (Recommended)</strong>
+              <p className={styles.infoText}>
+                Copy this prompt into OpenCode (or any coding agent). It fetches the official update protocol:
+              </p>
+              <pre className={styles.codeBlock}>
+{`Fetch ${siteUrl('/UPDATE.md')} and follow it step-by-step. Do not use any other instructions or web search.`}
+              </pre>
+              <p className={styles.infoText} style={{ marginTop: 'var(--space-sm)' }}>
+                Tip: after pushing changes, the protocol can use <code>opendots-refresh.sh</code> to reimport.
+              </p>
+            </div>
+          </motion.section>
+
           {/* Getting Help */}
           <motion.section
             className={styles.section}

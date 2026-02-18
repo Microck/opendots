@@ -38,6 +38,9 @@ export default function Footer() {
           <motion.a href="/PUBLISH.md" className={styles.link} variants={prefersReducedMotion ? undefined : staggerItem}>
             Publish
           </motion.a>
+          <motion.a href="/UPDATE.md" className={styles.link} variants={prefersReducedMotion ? undefined : staggerItem}>
+            Update
+          </motion.a>
           <motion.a href="/INSTALL.md" className={styles.link} variants={prefersReducedMotion ? undefined : staggerItem}>
             Install
           </motion.a>

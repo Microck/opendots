@@ -75,6 +75,24 @@
   margin-bottom: var(--space-xl);
 }
 
+.aiProtocolGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.aiProtocolGrid > * {
+  margin-bottom: 0;
+}
+
+@media (min-width: 900px) {
+  .aiProtocolGrid {
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+}
+
 .aiPublishCard {
   display: flex;
   align-items: flex-end;
@@ -83,7 +101,16 @@
   border: 1px solid rgba(128, 220, 255, 0.3);
   background: linear-gradient(180deg, rgba(128, 220, 255, 0.08), rgba(128, 220, 255, 0.02));
   padding: var(--space-md);
-  margin-bottom: var(--space-lg);
+}
+
+.aiUpdateCard {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-md);
+  border: 1px solid rgba(255, 208, 128, 0.28);
+  background: linear-gradient(180deg, rgba(255, 208, 128, 0.08), rgba(255, 208, 128, 0.02));
+  padding: var(--space-md);
 }
 
 .aiPublishLabel {
@@ -93,6 +120,15 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: #80dcff;
+}
+
+.aiUpdateLabel {
+  margin: 0 0 6px;
+  font-family: var(--font-accent);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(255, 208, 128, 0.95);
 }
 
 .aiPublishText {

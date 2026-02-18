@@ -77,6 +77,17 @@ export interface BundleData {
     errorMessage?: string
   } | null
   safetyResults: SafetyResults | null
+  safetyStatus?: 'clean' | 'warning' | 'unknown'
+  changeSummary: {
+    latestCommitSha: string
+    previousCommitSha: string | null
+    addedCount: number
+    removedCount: number
+    changedCount: number
+    addedPaths: string[]
+    removedPaths: string[]
+    changedPaths: string[]
+  } | null
 }
 
 export interface DetailLayoutProps {

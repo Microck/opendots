@@ -217,17 +217,41 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
       }
 
       if (response.status === 400) {
+        let errorMessage = 'File is not previewable'
+        try {
+          const payload = await response.json()
+          if (payload?.error && typeof payload.error === 'string') {
+            errorMessage = payload.error
+          }
+        } catch {
+          // Keep fallback message.
+        }
+
         if (!mountedRef.current) return
         setFileContents(prev => {
           const next = new Map(prev)
-          next.set(path, { content: '', loading: false, error: 'Binary file - not previewable' })
+          next.set(path, { content: '', loading: false, error: errorMessage })
           return next
         })
         return
       }
 
       if (!response.ok) {
-        throw new Error(`Failed to load file: ${response.statusText}`)
+        let serverMessage = ''
+        try {
+          const payload = await response.json() as { error?: string; message?: string }
+          if (typeof payload?.error === 'string' && payload.error.trim().length > 0) {
+            serverMessage = payload.error.trim()
+          } else if (typeof payload?.message === 'string' && payload.message.trim().length > 0) {
+            serverMessage = payload.message.trim()
+          }
+        } catch {
+          // Fall back to status text below.
+        }
+
+        const statusDetails = response.statusText || `HTTP ${response.status}`
+        const suffix = serverMessage ? ` ${serverMessage}` : ''
+        throw new Error(`Failed to load file (${statusDetails}).${suffix}`)
       }
 
       const content = await response.text()
@@ -254,7 +278,7 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
   const handleFileClick = useCallback((path: string) => {
     setActiveFile(path)
     const file = files.find(f => f.path === path)
-    if (file && file.isPreviewable && !file.isBinary) {
+    if (file && !file.isBinary) {
       fetchFileContent(path)
     }
   }, [files, fetchFileContent])
@@ -265,11 +289,11 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
       const readmeRoot = files.find(f => f.path.toLowerCase() === 'readme.md')
       const readmeNested = files.find(f => f.path.toLowerCase().endsWith('/readme.md'))
       const readme = readmeRoot ?? readmeNested
-      const firstPreviewable = files.find(f => f.isPreviewable && !f.isBinary)
+      const firstPreviewable = files.find(f => !f.isBinary)
       const preferred = readme ?? firstPreviewable ?? files[0]
       if (preferred) {
         setActiveFile(preferred.path)
-        if (preferred.isPreviewable && !preferred.isBinary) {
+        if (!preferred.isBinary) {
           fetchFileContent(preferred.path)
         }
       }
@@ -341,7 +365,7 @@ export default function CodeExplorer({ bundleId, files }: CodeExplorerProps) {
       return (
         <div
           key={node.path}
-          className={`${styles.fileItem} ${activeFile === file.path ? styles.active : ''} ${!file.isPreviewable || file.isBinary ? styles.disabled : ''}`}
+          className={`${styles.fileItem} ${activeFile === file.path ? styles.active : ''} ${file.isBinary ? styles.disabled : ''}`}
           style={{ paddingLeft: `${8 + depth * 16}px` }}
           onClick={() => handleFileClick(file.path)}
           title={file.path}

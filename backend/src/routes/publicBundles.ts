@@ -32,11 +32,23 @@ interface BundleCardResponse {
   tags: string[];
   artifactTypes: string[];
   riskBadges: string[];
+  safetyStatus: 'clean' | 'warning' | 'unknown';
   accentColor: string | null;
   cardTheme: BundleCardTheme | null;
   stars: number;
   forks: number;
   updatedAt: string;
+}
+
+interface BundleChangeSummary {
+  latestCommitSha: string;
+  previousCommitSha: string | null;
+  addedCount: number;
+  removedCount: number;
+  changedCount: number;
+  addedPaths: string[];
+  removedPaths: string[];
+  changedPaths: string[];
 }
 
 function encodeHexToBase62(hex: string): string {
@@ -130,11 +142,34 @@ interface ParsedManifest {
 interface ParsedFileIndexEntry {
   kind?: unknown;
   path?: unknown;
+  size?: unknown;
+  isBinary?: unknown;
 }
 
 interface ParsedSafetyResults {
   riskFlags?: Array<{ flag?: unknown }>;
+  secretWarnings?: unknown[];
+  validation?: {
+    config?: {
+      valid?: unknown;
+      errors?: unknown;
+      warnings?: unknown;
+    } | null;
+    themes?: Array<{ valid?: unknown }>;
+    skills?: Array<{ valid?: unknown }>;
+  };
 }
+
+interface ShareBundleMeta {
+  bundleId: string;
+  name: string;
+  summary: string;
+  owner: string;
+  ownerAvatarUrl: string;
+  tags: string[];
+}
+
+const MAX_CHANGE_SAMPLE_PATHS = 12;
 
 async function resolveBundleId(identifier: string): Promise<string | null> {
   const raw = identifier.trim();
@@ -620,6 +655,140 @@ function getRiskBadges(safetyResults: ParsedSafetyResults | null): string[] {
   return Array.from(uniqueBadges);
 }
 
+function hasValidationIssues(safetyResults: ParsedSafetyResults | null): boolean {
+  const validation = safetyResults?.validation;
+  if (!validation) {
+    return false;
+  }
+
+  const config = validation.config;
+  if (config && config.valid === false) {
+    return true;
+  }
+
+  if (config && Array.isArray(config.errors) && config.errors.length > 0) {
+    return true;
+  }
+
+  if (config && Array.isArray(config.warnings) && config.warnings.length > 0) {
+    return true;
+  }
+
+  if (Array.isArray(validation.themes) && validation.themes.some((theme) => theme?.valid === false)) {
+    return true;
+  }
+
+  if (Array.isArray(validation.skills) && validation.skills.some((skill) => skill?.valid === false)) {
+    return true;
+  }
+
+  return false;
+}
+
+function getSafetyStatus(safetyResults: ParsedSafetyResults | null): 'clean' | 'warning' | 'unknown' {
+  if (!safetyResults) {
+    return 'unknown';
+  }
+
+  const hasRiskFlags = Array.isArray(safetyResults.riskFlags) && safetyResults.riskFlags.length > 0;
+  const hasSecretWarnings = Array.isArray(safetyResults.secretWarnings) && safetyResults.secretWarnings.length > 0;
+  if (hasRiskFlags || hasSecretWarnings || hasValidationIssues(safetyResults)) {
+    return 'warning';
+  }
+
+  return 'clean';
+}
+
+function toComparableFileMap(fileIndex: ParsedFileIndexEntry[] | null): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!fileIndex) {
+    return map;
+  }
+
+  for (const entry of fileIndex) {
+    if (typeof entry.path !== 'string' || entry.path.trim().length === 0) {
+      continue;
+    }
+
+    const path = entry.path;
+    const size = typeof entry.size === 'number' ? entry.size : -1;
+    const kind = typeof entry.kind === 'string' ? entry.kind : 'unknown';
+    const isBinary = entry.isBinary === true ? '1' : '0';
+    map.set(path, `${size}:${kind}:${isBinary}`);
+  }
+
+  return map;
+}
+
+function buildChangeSummary(
+  latestFileIndex: ParsedFileIndexEntry[] | null,
+  previousFileIndex: ParsedFileIndexEntry[] | null,
+  latestCommitSha: string,
+  previousCommitSha: string | null,
+): BundleChangeSummary {
+  const latestMap = toComparableFileMap(latestFileIndex);
+  const previousMap = toComparableFileMap(previousFileIndex);
+
+  const addedPaths: string[] = [];
+  const removedPaths: string[] = [];
+  const changedPaths: string[] = [];
+
+  for (const [path, signature] of latestMap.entries()) {
+    if (!previousMap.has(path)) {
+      addedPaths.push(path);
+      continue;
+    }
+
+    if (previousMap.get(path) !== signature) {
+      changedPaths.push(path);
+    }
+  }
+
+  for (const path of previousMap.keys()) {
+    if (!latestMap.has(path)) {
+      removedPaths.push(path);
+    }
+  }
+
+  addedPaths.sort((a, b) => a.localeCompare(b));
+  removedPaths.sort((a, b) => a.localeCompare(b));
+  changedPaths.sort((a, b) => a.localeCompare(b));
+
+  return {
+    latestCommitSha,
+    previousCommitSha,
+    addedCount: addedPaths.length,
+    removedCount: removedPaths.length,
+    changedCount: changedPaths.length,
+    addedPaths: addedPaths.slice(0, MAX_CHANGE_SAMPLE_PATHS),
+    removedPaths: removedPaths.slice(0, MAX_CHANGE_SAMPLE_PATHS),
+    changedPaths: changedPaths.slice(0, MAX_CHANGE_SAMPLE_PATHS),
+  };
+}
+
+function getSiteBaseUrl() {
+  const fromApp = process.env.APP_BASE_URL?.trim();
+  if (fromApp) {
+    return fromApp.replace(/\/$/, '');
+  }
+
+  const fromAuth = process.env.BETTER_AUTH_BASE_URL?.trim();
+  if (fromAuth) {
+    return fromAuth.replace(/\/$/, '');
+  }
+
+  return 'https://opendots.me';
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   // List public bundles for browse/home cards
   fastify.get('/api/bundles', async (request, reply) => {
@@ -662,6 +831,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           const tags = toStringArray(manifest?.tags);
           const artifactTypes = getArtifactTypes(fileIndex);
           const riskBadges = getRiskBadges(safetyResults);
+          const safetyStatus = getSafetyStatus(safetyResults);
           const name = typeof manifest?.name === 'string' ? manifest.name : bundle.githubRepo;
           const summary = typeof manifest?.summary === 'string' ? manifest.summary : '';
           const slug = typeof manifest?.id === 'string' ? manifest.id : bundle.githubRepo;
@@ -698,6 +868,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
             tags,
             artifactTypes,
             riskBadges,
+            safetyStatus,
             accentColor: resolvedAccentColor,
             cardTheme,
             stars: bundle.stars,
@@ -775,6 +946,41 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
     return bundle[0]?.id ?? null;
   }
 
+  async function getShareBundleMeta(bundleId: string): Promise<ShareBundleMeta | null> {
+    const rows = await db.select({
+      id: publisherBundle.id,
+      githubOwner: publisherBundle.githubOwner,
+      githubRepo: publisherBundle.githubRepo,
+      manifestJson: publisherBundle.manifestJson,
+    })
+      .from(publisherBundle)
+      .where(eq(publisherBundle.id, bundleId))
+      .limit(1);
+
+    if (!rows[0]) {
+      return null;
+    }
+
+    const row = rows[0];
+    const manifest = parseJson<ParsedManifest>(row.manifestJson);
+    const name = typeof manifest?.name === 'string' && manifest.name.trim().length > 0
+      ? manifest.name.trim()
+      : row.githubRepo;
+    const summary = typeof manifest?.summary === 'string'
+      ? manifest.summary.trim()
+      : '';
+    const tags = toStringArray(manifest?.tags);
+
+    return {
+      bundleId: row.id,
+      name,
+      summary,
+      owner: row.githubOwner,
+      ownerAvatarUrl: `https://github.com/${row.githubOwner}.png`,
+      tags,
+    };
+  }
+
   // Resolve short share code to canonical bundle id.
   fastify.get('/api/share/:code', async (request, reply) => {
     try {
@@ -805,7 +1011,58 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         return { error: 'Bundle not found' };
       }
 
-      return reply.redirect(`/bundle/${bundleId}`, 302);
+      const bundleMeta = await getShareBundleMeta(bundleId);
+      const siteBaseUrl = getSiteBaseUrl();
+      const targetPath = `/bundle/${bundleId}`;
+      const targetUrl = `${siteBaseUrl}${targetPath}`;
+      const shareUrl = `${siteBaseUrl}/${code}`;
+
+      const userAgent = String(request.headers['user-agent'] || '');
+      const accept = String(request.headers.accept || '');
+      const isCrawler = /(bot|crawler|spider|discordbot|slackbot|twitterbot|facebookexternalhit|linkedinbot|whatsapp|telegrambot|embedly|googlebot)/i.test(userAgent);
+      const wantsHtml = accept.includes('text/html') || isCrawler;
+
+      if (!wantsHtml || !bundleMeta) {
+        return reply.redirect(targetPath, 302);
+      }
+
+      const title = escapeHtml(`${bundleMeta.name} · OpenDots Bundle`);
+      const description = escapeHtml(
+        bundleMeta.summary || `OpenDots bundle by @${bundleMeta.owner}${bundleMeta.tags.length > 0 ? ` · ${bundleMeta.tags.slice(0, 5).join(', ')}` : ''}`,
+      );
+      const ogImage = escapeHtml(bundleMeta.ownerAvatarUrl);
+      const canonicalUrl = escapeHtml(shareUrl);
+      const escapedTargetUrl = escapeHtml(targetUrl);
+
+      const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <meta name="description" content="${description}" />
+    <link rel="canonical" href="${canonicalUrl}" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OpenDots" />
+    <meta property="og:title" content="${title}" />
+    <meta property="og:description" content="${description}" />
+    <meta property="og:url" content="${canonicalUrl}" />
+    <meta property="og:image" content="${ogImage}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="${title}" />
+    <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image" content="${ogImage}" />
+    <meta http-equiv="refresh" content="0;url=${escapedTargetUrl}" />
+    <script>window.location.replace(${JSON.stringify(targetUrl)});</script>
+  </head>
+  <body>
+    <p>Redirecting to <a href="${escapedTargetUrl}">${escapedTargetUrl}</a>...</p>
+  </body>
+</html>`;
+
+      reply.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=120');
+      reply.type('text/html; charset=utf-8');
+      return html;
     } catch (error) {
       console.error('Failed to redirect share code:', error);
       reply.code(500);
@@ -849,8 +1106,8 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const bundleData = bundle[0];
 
-      // Get latest snapshot with file index and safety results
-      const latestSnapshot = await db.select({
+      // Get most recent snapshots for diff/change summary.
+      const recentSnapshots = await db.select({
         commitSha: snapshot.commitSha,
         createdAt: snapshot.createdAt,
         storagePath: snapshot.storagePath,
@@ -861,7 +1118,10 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         .from(snapshot)
         .where(eq(snapshot.bundleId, resolvedBundleId))
         .orderBy(desc(snapshot.createdAt))
-        .limit(1);
+        .limit(2);
+
+      const latestSnapshot = recentSnapshots[0] ?? null;
+      const previousSnapshot = recentSnapshots[1] ?? null;
 
       // Get last import info
       const lastImport = await db.select({
@@ -889,26 +1149,44 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       try {
-        if (latestSnapshot[0]?.fileIndex) {
-          fileIndex = JSON.parse(latestSnapshot[0].fileIndex);
+        if (latestSnapshot?.fileIndex) {
+          fileIndex = JSON.parse(latestSnapshot.fileIndex);
         }
       } catch {
         // Invalid file index JSON
       }
 
       try {
-        if (latestSnapshot[0]?.safetyResults) {
-          safetyResults = JSON.parse(latestSnapshot[0].safetyResults);
+        if (latestSnapshot?.safetyResults) {
+          safetyResults = JSON.parse(latestSnapshot.safetyResults);
         }
       } catch {
         // Invalid safety results JSON
       }
 
+      let previousFileIndex: ParsedFileIndexEntry[] | null = null;
+      try {
+        if (previousSnapshot?.fileIndex) {
+          previousFileIndex = JSON.parse(previousSnapshot.fileIndex);
+        }
+      } catch {
+        // Ignore invalid previous snapshot file index.
+      }
+
+      const changeSummary = latestSnapshot
+        ? buildChangeSummary(
+          fileIndex,
+          previousFileIndex,
+          latestSnapshot.commitSha,
+          previousSnapshot?.commitSha ?? null,
+        )
+        : null;
+
       const manifestCardTheme = toBundleCardTheme(manifest?.cardTheme ?? manifest?.bundleCardTheme);
       const snapshotCardTheme = await getCardThemeFromSnapshot({
-        storagePath: latestSnapshot[0]?.storagePath,
+        storagePath: latestSnapshot?.storagePath,
         bundleId: resolvedBundleId,
-        commitSha: latestSnapshot[0]?.commitSha,
+        commitSha: latestSnapshot?.commitSha,
         fileIndex,
       });
       const cardTheme = manifestCardTheme ?? snapshotCardTheme;
@@ -932,14 +1210,16 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         status: bundleData.status,
         createdAt: bundleData.createdAt,
         updatedAt: bundleData.updatedAt,
-        latestSnapshot: latestSnapshot[0] ? {
-          commitSha: latestSnapshot[0].commitSha,
-          createdAt: latestSnapshot[0].createdAt,
-          byteSize: latestSnapshot[0].byteSize,
+        latestSnapshot: latestSnapshot ? {
+          commitSha: latestSnapshot.commitSha,
+          createdAt: latestSnapshot.createdAt,
+          byteSize: latestSnapshot.byteSize,
         } : null,
         fileIndex: fileIndex || [],
         cardTheme,
         safetyResults: safetyResults,
+        safetyStatus: getSafetyStatus(safetyResults),
+        changeSummary,
         lastImport: lastImport[0] ? {
           commitSha: lastImport[0].commitSha,
           status: lastImport[0].status,

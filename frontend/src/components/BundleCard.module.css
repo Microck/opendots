@@ -53,6 +53,32 @@
   color: var(--card-muted-custom, var(--text-dim));
 }
 
+.safetyBadge {
+  margin-left: auto;
+  padding: 2px 7px;
+  border: 1px solid currentColor;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.3;
+}
+
+.safetyClean {
+  color: #79d69d;
+  background: rgba(121, 214, 157, 0.12);
+}
+
+.safetyWarning {
+  color: #ffae63;
+  background: rgba(255, 174, 99, 0.14);
+}
+
+.safetyUnknown {
+  color: var(--card-muted-custom, var(--text-dim));
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .header {
   display: flex;
   align-items: center;

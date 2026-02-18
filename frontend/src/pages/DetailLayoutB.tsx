@@ -257,8 +257,12 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
   const [overviewMarkdown, setOverviewMarkdown] = useState<string>('')
   const [overviewSections, setOverviewSections] = useState<OverviewSection[]>([])
   const [overviewVisibleCounts, setOverviewVisibleCounts] = useState<Record<string, number>>({})
+  const [overviewSearch, setOverviewSearch] = useState('')
+  const [collapsedOverviewSections, setCollapsedOverviewSections] = useState<Set<string>>(new Set())
   const [overviewLoading, setOverviewLoading] = useState(false)
   const [overviewError, setOverviewError] = useState<string | null>(null)
+  const [projectCommandCopied, setProjectCommandCopied] = useState(false)
+  const [globalCommandCopied, setGlobalCommandCopied] = useState(false)
 
   const v = (variants: import('motion/react').Variants) =>
     prefersReducedMotion ? undefined : variants
@@ -280,7 +284,16 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
   const customDisplayName = bundle.name
   const avatarUrl = bundle.ownerAvatarUrl || `https://github.com/${author}.png`
   const bundleUrl = siteUrl(`/${bundle.shareCode || bundle.id}`)
+  const projectDownloadUrl = apiUrl(`/api/bundles/${bundle.id}/download?variant=project`)
+  const globalDownloadUrl = apiUrl(`/api/bundles/${bundle.id}/download?variant=global`)
+  const projectInstallCommand = `curl -fsSL \"${projectDownloadUrl}\" -o opendots-bundle-project.zip && unzip -o opendots-bundle-project.zip -d .`
+  const globalInstallCommand = `mkdir -p \"$HOME/.config/opencode\" && curl -fsSL \"${globalDownloadUrl}\" -o opendots-bundle-global.zip && unzip -o opendots-bundle-global.zip -d \"$HOME/.config/opencode\"`
   const installPrompt = `Fetch and follow ${siteUrl('/INSTALL.md')} for bundle URL: ${bundleUrl}`
+  const lastImportedAtMs = bundle.lastImport ? new Date(bundle.lastImport.importedAt).getTime() : Number.NaN
+  const importAgeDays = Number.isFinite(lastImportedAtMs)
+    ? Math.floor((Date.now() - lastImportedAtMs) / (24 * 60 * 60 * 1000))
+    : null
+  const isImportStale = !bundle.lastImport || bundle.lastImport.status !== 'success' || (importAgeDays !== null && importAgeDays >= 21)
   const overviewReadmePath = useMemo(() => pickReadmePath(bundle.fileIndex), [bundle.fileIndex])
   const heroSurfaceRef = useReactiveSurfaceVars<HTMLDivElement>(!prefersReducedMotion, {
     shiftX: 20,
@@ -302,14 +315,26 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
     }
   }
 
-  const handleCopyShareLink = async () => {
+  const copyTextWithToast = async (text: string, onComplete: (ok: boolean) => void) => {
     try {
-      await navigator.clipboard.writeText(bundleUrl)
-      setShareLinkCopied(true)
-      window.setTimeout(() => setShareLinkCopied(false), 1800)
+      await navigator.clipboard.writeText(text)
+      onComplete(true)
+      window.setTimeout(() => onComplete(false), 1800)
     } catch {
-      setShareLinkCopied(false)
+      onComplete(false)
     }
+  }
+
+  const handleCopyShareLink = async () => {
+    await copyTextWithToast(bundleUrl, setShareLinkCopied)
+  }
+
+  const handleCopyProjectInstallCommand = async () => {
+    await copyTextWithToast(projectInstallCommand, setProjectCommandCopied)
+  }
+
+  const handleCopyGlobalInstallCommand = async () => {
+    await copyTextWithToast(globalInstallCommand, setGlobalCommandCopied)
   }
 
   useEffect(() => {
@@ -400,6 +425,7 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
       next[section.id] = Math.min(OVERVIEW_PAGE_SIZE, section.items.length)
     }
     setOverviewVisibleCounts(next)
+    setCollapsedOverviewSections(new Set())
   }, [overviewSections])
 
   const handleLoadMoreOverview = (sectionId: string) => {
@@ -423,6 +449,27 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
       [sectionId]: total,
     }))
   }
+
+  const toggleOverviewSection = (sectionId: string) => {
+    setCollapsedOverviewSections((prev) => {
+      const next = new Set(prev)
+      if (next.has(sectionId)) {
+        next.delete(sectionId)
+      } else {
+        next.add(sectionId)
+      }
+      return next
+    })
+  }
+
+  const normalizedOverviewSearch = overviewSearch.trim().toLowerCase()
+  const hasOverviewMatches = overviewSections.some((section) => {
+    if (normalizedOverviewSearch.length === 0) {
+      return section.items.length > 0
+    }
+
+    return section.items.some((item) => `${item.name} ${item.summary}`.toLowerCase().includes(normalizedOverviewSearch))
+  })
 
   return (
     <div className={styles.page} style={themedStyle}>
@@ -657,6 +704,19 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                 </span>
               </div>
 
+              {activeTab === 'overview' && overviewSections.length > 0 && (
+                <div className={styles.overviewToolbar}>
+                  <input
+                    type="search"
+                    className={styles.overviewSearchInput}
+                    value={overviewSearch}
+                    onChange={(event) => setOverviewSearch(event.target.value)}
+                    placeholder="Search skills, plugins, MCPs..."
+                    aria-label="Search overview items"
+                  />
+                </div>
+              )}
+
               {activeTab === 'overview' ? (
                 <div className={styles.overviewPanel} role="tabpanel" aria-label="Bundle overview">
                   {overviewLoading ? (
@@ -667,47 +727,78 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                       {overviewSections.length > 0 ? (
                         <div className={styles.overviewSections}>
                           {overviewSections.map((section) => {
-                            const visibleCount = overviewVisibleCounts[section.id] ?? Math.min(OVERVIEW_PAGE_SIZE, section.items.length)
-                            const hasMore = visibleCount < section.items.length
-                            const visibleItems = section.items.slice(0, visibleCount)
+                            const filteredItems = normalizedOverviewSearch.length > 0
+                              ? section.items.filter((item) => {
+                                const haystack = `${item.name} ${item.summary}`.toLowerCase()
+                                return haystack.includes(normalizedOverviewSearch)
+                              })
+                              : section.items
+
+                            if (filteredItems.length === 0) {
+                              return null
+                            }
+
+                            const visibleCount = overviewVisibleCounts[section.id] ?? Math.min(OVERVIEW_PAGE_SIZE, filteredItems.length)
+                            const hasMore = visibleCount < filteredItems.length
+                            const visibleItems = filteredItems.slice(0, visibleCount)
+                            const collapsed = collapsedOverviewSections.has(section.id)
 
                             return (
                               <section key={section.id} className={styles.overviewSectionBlock}>
                                 <header className={styles.overviewSectionHeader}>
-                                  <h3 className={styles.overviewSectionTitle}>{section.title}</h3>
-                                  <span className={styles.overviewSectionCount}>{section.items.length}</span>
+                                  <button
+                                    type="button"
+                                    className={styles.overviewSectionToggle}
+                                    onClick={() => toggleOverviewSection(section.id)}
+                                    aria-expanded={!collapsed}
+                                  >
+                                    <span className={styles.overviewSectionChevron} aria-hidden>{collapsed ? '>' : 'v'}</span>
+                                    <h3 className={styles.overviewSectionTitle}>{section.title}</h3>
+                                  </button>
+                                  <span className={styles.overviewSectionCount}>
+                                    {filteredItems.length}
+                                    {filteredItems.length !== section.items.length ? ` / ${section.items.length}` : ''}
+                                  </span>
                                 </header>
 
-                                <ul className={styles.overviewList}>
-                                  {visibleItems.map((item) => (
-                                    <li key={item.id} className={styles.overviewListItem}>
-                                      <div className={styles.overviewItemName}>{item.name}</div>
-                                      <p className={styles.overviewItemSummary}>{item.summary}</p>
-                                    </li>
-                                  ))}
-                                </ul>
+                                {!collapsed && (
+                                  <>
+                                    <ul className={styles.overviewList}>
+                                      {visibleItems.map((item) => (
+                                        <li key={item.id} className={styles.overviewListItem}>
+                                          <div className={styles.overviewItemName}>{item.name}</div>
+                                          <p className={styles.overviewItemSummary}>{item.summary}</p>
+                                        </li>
+                                      ))}
+                                    </ul>
 
-                                {hasMore && (
-                                  <div className={styles.overviewActions}>
-                                    <button
-                                      type="button"
-                                      className={styles.overviewActionButton}
-                                      onClick={() => handleLoadMoreOverview(section.id)}
-                                    >
-                                      Load more
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={styles.overviewActionButton}
-                                      onClick={() => handleLoadAllOverview(section.id)}
-                                    >
-                                      Load all
-                                    </button>
-                                  </div>
+                                    {hasMore && (
+                                      <div className={styles.overviewActions}>
+                                        <button
+                                          type="button"
+                                          className={styles.overviewActionButton}
+                                          onClick={() => handleLoadMoreOverview(section.id)}
+                                        >
+                                          Load more
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={styles.overviewActionButton}
+                                          onClick={() => handleLoadAllOverview(section.id)}
+                                        >
+                                          Load all
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
                                 )}
                               </section>
                             )
                           })}
+
+                          {!hasOverviewMatches && (
+                            <div className={styles.overviewEmptyState}>No overview items match this search.</div>
+                          )}
                         </div>
                       ) : (
                         <Suspense fallback={<div className={styles.overviewState}>Rendering overview...</div>}>
@@ -727,6 +818,85 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                 </div>
               )}
             </motion.section>
+
+            {bundle.changeSummary && (
+              <motion.section
+                className={styles.changeCard}
+                variants={v(sectionReveal)}
+                initial="hidden"
+                whileInView="visible"
+                viewport={scrollViewports.once}
+              >
+                <div className={styles.changeHeader}>
+                  <h3 className={styles.cardHeading}>What Changed</h3>
+                  <span className={styles.changeMeta}>Latest {bundle.changeSummary.latestCommitSha.slice(0, 7)}</span>
+                </div>
+
+                {bundle.changeSummary.previousCommitSha ? (
+                  <p className={styles.changeDescription}>
+                    Compared against {bundle.changeSummary.previousCommitSha.slice(0, 7)}.
+                  </p>
+                ) : (
+                  <p className={styles.changeDescription}>
+                    First imported snapshot for this bundle.
+                  </p>
+                )}
+
+                <div className={styles.changeCounts}>
+                  <span className={styles.changeCountAdd}>+{bundle.changeSummary.addedCount} added</span>
+                  <span className={styles.changeCountRemove}>-{bundle.changeSummary.removedCount} removed</span>
+                  <span className={styles.changeCountChange}>~{bundle.changeSummary.changedCount} changed</span>
+                </div>
+
+                <div className={styles.changeLists}>
+                  {bundle.changeSummary.addedPaths.length > 0 && (
+                    <div className={styles.changeListBlock}>
+                      <h4>Added</h4>
+                      <ul>
+                        {bundle.changeSummary.addedPaths.map((path) => <li key={`a:${path}`}>{path}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {bundle.changeSummary.changedPaths.length > 0 && (
+                    <div className={styles.changeListBlock}>
+                      <h4>Changed</h4>
+                      <ul>
+                        {bundle.changeSummary.changedPaths.map((path) => <li key={`c:${path}`}>{path}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {bundle.changeSummary.removedPaths.length > 0 && (
+                    <div className={styles.changeListBlock}>
+                      <h4>Removed</h4>
+                      <ul>
+                        {bundle.changeSummary.removedPaths.map((path) => <li key={`r:${path}`}>{path}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </motion.section>
+            )}
+
+            {isImportStale && (
+              <motion.div
+                className={styles.staleBanner}
+                variants={v(fadeIn)}
+                initial="hidden"
+                whileInView="visible"
+                viewport={scrollViewports.once}
+              >
+                <Warning size={14} weight="bold" aria-hidden />
+                <span>
+                  {bundle.lastImport?.status !== 'success'
+                    ? 'Last import did not complete successfully. This bundle may be stale.'
+                    : importAgeDays !== null
+                      ? `Last import is ${importAgeDays} days old. Consider refreshing before install.`
+                      : 'Import freshness is unknown. Review carefully before install.'}
+                </span>
+              </motion.div>
+            )}
 
             {/* Import footer */}
             <motion.div
@@ -785,7 +955,7 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
 
               <ClickSpark sparkColor="rgba(255,255,255,0.9)" sparkSize={9} sparkRadius={11}>
                 <a
-                  href={apiUrl(`/api/bundles/${bundle.id}/download?variant=project`)}
+                  href={projectDownloadUrl}
                   className={styles.btnPrimary}
                   download
                 >
@@ -796,7 +966,7 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
 
               <ClickSpark sparkColor="rgba(255,255,255,0.9)" sparkSize={9} sparkRadius={11}>
                 <a
-                  href={apiUrl(`/api/bundles/${bundle.id}/download?variant=global`)}
+                  href={globalDownloadUrl}
                   className={styles.btnSecondary}
                   download
                 >
@@ -806,6 +976,31 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
               <p className={styles.installHint}>
                 Extract to <code>~/.config/opencode/</code>
               </p>
+
+              <div className={styles.aiInstallCard}>
+                <p className={styles.aiInstallLabel}>Quick install commands</p>
+                <p className={styles.aiInstallText}>
+                  Copy command-line install flows for project root or global OpenCode config.
+                </p>
+                <div className={styles.installActionsStack}>
+                  <button
+                    type="button"
+                    className={styles.aiInstallCopyButton}
+                    onClick={() => void handleCopyProjectInstallCommand()}
+                  >
+                    <CopySimple size={14} weight="bold" aria-hidden />
+                    {projectCommandCopied ? 'PROJECT CMD COPIED' : 'COPY PROJECT INSTALL CMD'}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.aiInstallCopyButton}
+                    onClick={() => void handleCopyGlobalInstallCommand()}
+                  >
+                    <CopySimple size={14} weight="bold" aria-hidden />
+                    {globalCommandCopied ? 'GLOBAL CMD COPIED' : 'COPY GLOBAL INSTALL CMD'}
+                  </button>
+                </div>
+              </div>
             </motion.div>
 
             {/* Meta card */}

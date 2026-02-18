@@ -25,16 +25,28 @@ async function getServer() {
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   // Vercel Functions (non-Next.js) do not support catch-all routes like
   // `api/[...path].ts`. We implement catch-all behavior via `vercel.json` rewrite
-  // that rewrites `/api/<anything>` to `/api?path=<anything>`.
+  // that rewrites `/api/<anything>` to `/api?__opendots_path=<anything>`.
   //
   // Reconstruct the original path so Fastify sees `/api/...`.
   if (req.url) {
     const url = new URL(req.url, 'http://localhost')
-    const path = url.searchParams.get('path')
-    if (path) {
-      url.searchParams.delete('path')
-      const normalized = path.startsWith('/') ? path.slice(1) : path
-      url.pathname = `/api/${normalized}`
+    const rewrittenPath = url.searchParams.get('__opendots_path')
+    if (rewrittenPath) {
+      url.searchParams.delete('__opendots_path')
+      const rewritten = new URL(
+        rewrittenPath.startsWith('/') ? `http://localhost${rewrittenPath}` : `http://localhost/${rewrittenPath}`,
+      )
+      const normalizedPath = rewritten.pathname.startsWith('/')
+        ? rewritten.pathname.slice(1)
+        : rewritten.pathname
+
+      // Preserve query params that may be embedded in the rewritten path,
+      // e.g. /api/bundles/:id/file?path=dir/file.md
+      rewritten.searchParams.forEach((value, key) => {
+        url.searchParams.set(key, value)
+      })
+
+      url.pathname = `/api/${normalizedPath}`
       req.url = `${url.pathname}${url.search}`
     }
   }

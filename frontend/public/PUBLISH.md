@@ -1249,6 +1249,75 @@ print('README contents block updated.')
 PY
 ```
 
+## Step 4.7 - Run quality gates (required)
+
+Run this immediately after Step 4.6. It fails fast when required metadata is missing or too generic.
+
+```bash
+python3 - <<'PY'
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+repo = Path('.').resolve()
+readme = repo / 'README.md'
+config = repo / 'opendots.yml'
+public_cfg = repo / 'opencode.public.json'
+
+errors: list[str] = []
+warnings: list[str] = []
+
+if not readme.exists():
+  errors.append('README.md is required.')
+if not config.exists():
+  errors.append('opendots.yml is required.')
+if not public_cfg.exists():
+  errors.append('opencode.public.json is required.')
+
+if readme.exists():
+  text = readme.read_text(encoding='utf-8', errors='replace')
+  start = '<!-- OPENDOTS_AUTO_CONTENTS_START -->'
+  end = '<!-- OPENDOTS_AUTO_CONTENTS_END -->'
+  if start not in text or end not in text:
+    errors.append('README.md is missing OPENDOTS auto-contents markers.')
+  else:
+    block = re.search(re.escape(start) + r'([\s\S]*?)' + re.escape(end), text)
+    if not block or not block.group(1).strip():
+      errors.append('README.md auto-contents block is empty.')
+    else:
+      lines = [line.strip() for line in block.group(1).splitlines() if line.strip()]
+      section_lines = [line for line in lines if line.startswith('- **')]
+      entry_lines = [line for line in lines if line.startswith('- `') or line.startswith('-') and '`' in line]
+      if len(section_lines) < 2:
+        errors.append('README overview needs at least 2 sections (skills/plugins/commands/etc).')
+      if len(entry_lines) < 6:
+        errors.append('README overview needs at least 6 described entries.')
+
+      generic_patterns = (
+        'definition file.',
+        'definition.',
+        'could not parse mcp details',
+        'integration for specialized tooling',
+      )
+      generic_count = sum(1 for line in entry_lines if any(token in line.lower() for token in generic_patterns))
+      if generic_count > max(2, len(entry_lines) // 3):
+        warnings.append('Too many generic summaries. Add better descriptions in source files.')
+
+if errors:
+  print('QUALITY GATE FAILED:')
+  for err in errors:
+    print(f'- {err}')
+  raise SystemExit(1)
+
+print('QUALITY GATE PASSED.')
+if warnings:
+  print('Warnings:')
+  for warning in warnings:
+    print(f'- {warning}')
+PY
+```
+
 ---
 
 ## Step 5 - Push to GitHub

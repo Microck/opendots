@@ -26,6 +26,18 @@ Optional inputs:
 
 ---
 
+## Fast path - One command refresh
+
+After you commit and push your bundle changes, run this from the repo root:
+
+```bash
+curl -fsSL "$OPENDOTS_SITE_BASE/opendots-refresh.sh" | bash -s -- owner/repo
+```
+
+This automates claim start -> claim file commit/push -> claim complete.
+
+---
+
 ## Step 1 - Update bundle files
 
 Apply your file changes in the repository first.
@@ -38,6 +50,13 @@ sed -n '940,1220p' /tmp/opendots-PUBLISH.md
 ```
 
 Run the `python3 - <<'PY'` block from Step 4.6 in your repo root.
+
+Then run the Step 4.7 quality gate from `PUBLISH.md`.
+
+```bash
+curl -fsSL "$OPENDOTS_SITE_BASE/PUBLISH.md" -o /tmp/opendots-PUBLISH.md
+sed -n '1252,1355p' /tmp/opendots-PUBLISH.md
+```
 
 ---
 

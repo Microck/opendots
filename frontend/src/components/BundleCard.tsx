@@ -17,6 +17,7 @@ export interface BundleCardData {
   tags: string[]
   artifactTypes: string[]
   riskBadges: string[]
+  safetyStatus: 'clean' | 'warning' | 'unknown'
   accentColor: string | null
   cardTheme: {
     background?: string
@@ -125,6 +126,12 @@ export default function BundleCard({ bundle }: BundleCardProps) {
     '--card-chip-text-custom': effectiveTheme?.chipText ?? undefined,
   } as CSSProperties
 
+  const safetyLabel = bundle.safetyStatus === 'warning'
+    ? 'Warnings'
+    : bundle.safetyStatus === 'clean'
+      ? 'Clean'
+      : 'Unscanned'
+
   return (
     <motion.div
       className={styles.card}
@@ -146,6 +153,11 @@ export default function BundleCard({ bundle }: BundleCardProps) {
           loading="lazy"
         />
         <span className={styles.creatorHandle}>@{bundle.owner}</span>
+        <span
+          className={`${styles.safetyBadge} ${bundle.safetyStatus === 'warning' ? styles.safetyWarning : bundle.safetyStatus === 'clean' ? styles.safetyClean : styles.safetyUnknown}`}
+        >
+          {safetyLabel}
+        </span>
       </div>
       <div className={styles.header}>
         <h3 className={styles.name}>{bundle.name}</h3>

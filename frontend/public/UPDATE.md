@@ -46,9 +46,10 @@ Then regenerate README overview content by running Step 4.6 from `PUBLISH.md`.
 
 Current behavior:
 
-- Skills/Commands/Agents/Themes/Tools are emitted as name-only entries (cleaner for large bundles).
+- Skills are emitted as name-only entries.
 - Plugins keep purpose-focused summaries.
   - Registry files like `plugins/**/marketplace.json` are summarized as registries (they are NOT installed plugins).
+- Commands/Agents/Themes/Tools keep short, purpose-focused summaries.
 - MCP Servers keep purpose-focused summaries.
   - If any MCP entry is still generic, add an override in `mcp.descriptions.json` and re-run Step 4.6.
 

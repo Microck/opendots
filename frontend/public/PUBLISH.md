@@ -961,6 +961,8 @@ Coverage requirements for this step:
 
 - MCP entries must use server names (for example `kagi-search`) with purpose-focused summaries.
 - When a trustworthy source can be inferred, MCP entries should include a link to the official source (repo/package/endpoint).
+- Only `Skills` are emitted as name-only entries.
+- All other sections must include a short, purpose-focused description.
 - Plugin registries like `plugins/**/marketplace.json` must NOT be treated as installed plugins.
   - Summarize registry files as registries (include entry count when possible).
   - Installed plugin artifacts are the files under `plugins/` or `.opencode/plugins/`.
@@ -1039,11 +1041,12 @@ ROOT_FOLDERS = {
 
 SUMMARY_MODE_BY_SECTION = {
   'Skills': 'name_only',
-  'Commands': 'name_only',
-  'Agents': 'name_only',
-  'Themes': 'name_only',
-  'Tools': 'name_only',
+  # Everything else should include a short description.
   'Plugins': 'with_summary',
+  'Commands': 'with_summary',
+  'Agents': 'with_summary',
+  'Themes': 'with_summary',
+  'Tools': 'with_summary',
 }
 
 BUCKET_SEGMENTS = {

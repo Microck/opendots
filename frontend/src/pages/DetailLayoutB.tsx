@@ -43,6 +43,12 @@ const OVERVIEW_PAGE_SIZE = 12
 
 type OverviewTab = 'overview' | 'files'
 
+interface OverviewResponse {
+  readmePath: string
+  source: 'markers' | 'contents' | 'full'
+  markdown: string
+}
+
 interface OverviewItem {
   id: string
   name: string
@@ -261,8 +267,6 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
   const [collapsedOverviewSections, setCollapsedOverviewSections] = useState<Set<string>>(new Set())
   const [overviewLoading, setOverviewLoading] = useState(false)
   const [overviewError, setOverviewError] = useState<string | null>(null)
-  const [projectCommandCopied, setProjectCommandCopied] = useState(false)
-  const [globalCommandCopied, setGlobalCommandCopied] = useState(false)
 
   const v = (variants: import('motion/react').Variants) =>
     prefersReducedMotion ? undefined : variants
@@ -286,8 +290,6 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
   const bundleUrl = siteUrl(`/${bundle.shareCode || bundle.id}`)
   const projectDownloadUrl = apiUrl(`/api/bundles/${bundle.id}/download?variant=project`)
   const globalDownloadUrl = apiUrl(`/api/bundles/${bundle.id}/download?variant=global`)
-  const projectInstallCommand = `curl -fsSL \"${projectDownloadUrl}\" -o opendots-bundle-project.zip && unzip -o opendots-bundle-project.zip -d .`
-  const globalInstallCommand = `mkdir -p \"$HOME/.config/opencode\" && curl -fsSL \"${globalDownloadUrl}\" -o opendots-bundle-global.zip && unzip -o opendots-bundle-global.zip -d \"$HOME/.config/opencode\"`
   const installPrompt = `Fetch and follow ${siteUrl('/INSTALL.md')} for bundle URL: ${bundleUrl}`
   const lastImportedAtMs = bundle.lastImport ? new Date(bundle.lastImport.importedAt).getTime() : Number.NaN
   const importAgeDays = Number.isFinite(lastImportedAtMs)
@@ -329,14 +331,6 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
     await copyTextWithToast(bundleUrl, setShareLinkCopied)
   }
 
-  const handleCopyProjectInstallCommand = async () => {
-    await copyTextWithToast(projectInstallCommand, setProjectCommandCopied)
-  }
-
-  const handleCopyGlobalInstallCommand = async () => {
-    await copyTextWithToast(globalInstallCommand, setGlobalCommandCopied)
-  }
-
   useEffect(() => {
     let cancelled = false
     const abortController = new AbortController()
@@ -354,21 +348,35 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
       setOverviewError(null)
 
       try {
-        const response = await fetch(
-          apiUrl(`/api/bundles/${bundle.id}/file?path=${encodeURIComponent(overviewReadmePath)}`),
+        let sectionContent = ''
+
+        const overviewResponse = await fetch(
+          apiUrl(`/api/bundles/${bundle.id}/overview`),
           { signal: abortController.signal },
         )
 
-        if (!response.ok) {
-          throw new Error('Failed to load README overview')
+        if (overviewResponse.ok) {
+          const payload = await overviewResponse.json() as OverviewResponse
+          sectionContent = payload.markdown || ''
+        } else {
+          // Backward-compatible fallback for older deployments.
+          const response = await fetch(
+            apiUrl(`/api/bundles/${bundle.id}/file?path=${encodeURIComponent(overviewReadmePath)}`),
+            { signal: abortController.signal },
+          )
+
+          if (!response.ok) {
+            throw new Error('Failed to load README overview')
+          }
+
+          const readmeContent = await response.text()
+          sectionContent = extractOverviewSection(readmeContent) ?? ''
         }
 
-        const readmeContent = await response.text()
         if (cancelled) {
           return
         }
 
-        const sectionContent = extractOverviewSection(readmeContent)
         if (sectionContent) {
           const parsedSections = parseOverviewSections(sectionContent)
           if (parsedSections.length > 0) {
@@ -693,19 +701,7 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                     Files
                   </button>
                 </div>
-                <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
-                  {activeTab === 'files'
-                    ? `${bundle.fileIndex.length} files`
-                    : overviewReadmePath
-                      ? `source: ${overviewReadmePath}`
-                      : 'source: generated fallback'}
-                  {' '} &middot; {' '}
-                  {bundle.latestSnapshot ? formatSize(bundle.latestSnapshot.byteSize) : 'Unknown'}
-                </span>
-              </div>
-
-              {activeTab === 'overview' && overviewSections.length > 0 && (
-                <div className={styles.overviewToolbar}>
+                {activeTab === 'overview' && overviewSections.length > 0 ? (
                   <input
                     type="search"
                     className={styles.overviewSearchInput}
@@ -714,8 +710,18 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                     placeholder="Search skills, plugins, MCPs..."
                     aria-label="Search overview items"
                   />
-                </div>
-              )}
+                ) : (
+                  <span className="text-mono" style={{ fontSize: '0.7rem', color: 'var(--text-dim)' }}>
+                    {activeTab === 'files'
+                      ? `${bundle.fileIndex.length} files`
+                      : overviewReadmePath
+                        ? `source: ${overviewReadmePath}`
+                        : 'source: generated fallback'}
+                    {' '} &middot; {' '}
+                    {bundle.latestSnapshot ? formatSize(bundle.latestSnapshot.byteSize) : 'Unknown'}
+                  </span>
+                )}
+              </div>
 
               {activeTab === 'overview' ? (
                 <div className={styles.overviewPanel} role="tabpanel" aria-label="Bundle overview">
@@ -976,31 +982,6 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
               <p className={styles.installHint}>
                 Extract to <code>~/.config/opencode/</code>
               </p>
-
-              <div className={styles.aiInstallCard}>
-                <p className={styles.aiInstallLabel}>Quick install commands</p>
-                <p className={styles.aiInstallText}>
-                  Copy command-line install flows for project root or global OpenCode config.
-                </p>
-                <div className={styles.installActionsStack}>
-                  <button
-                    type="button"
-                    className={styles.aiInstallCopyButton}
-                    onClick={() => void handleCopyProjectInstallCommand()}
-                  >
-                    <CopySimple size={14} weight="bold" aria-hidden />
-                    {projectCommandCopied ? 'PROJECT CMD COPIED' : 'COPY PROJECT INSTALL CMD'}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.aiInstallCopyButton}
-                    onClick={() => void handleCopyGlobalInstallCommand()}
-                  >
-                    <CopySimple size={14} weight="bold" aria-hidden />
-                    {globalCommandCopied ? 'GLOBAL CMD COPIED' : 'COPY GLOBAL INSTALL CMD'}
-                  </button>
-                </div>
-              </div>
             </motion.div>
 
             {/* Meta card */}

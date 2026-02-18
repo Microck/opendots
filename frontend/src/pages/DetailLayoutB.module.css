@@ -312,12 +312,6 @@
   font-size: 0.65rem;
 }
 
-.installActionsStack {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 /* Meta definition list */
 .metaList {
   display: grid;
@@ -570,14 +564,8 @@
   font-size: 0.8rem;
 }
 
-.overviewToolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--space-sm);
-}
-
 .overviewSearchInput {
-  width: min(420px, 100%);
+  width: min(460px, 100%);
   border: 1px solid var(--bundle-surface-border, var(--border-light));
   background: color-mix(in srgb, var(--bundle-surface-bg, var(--bg-card)) 88%, black 12%);
   color: var(--bundle-title-color, var(--text-main));

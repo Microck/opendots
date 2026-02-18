@@ -15,56 +15,67 @@ const SECRET_PATTERNS: Array<{
   name: string;
   pattern: RegExp;
   description: string;
+  confidence: 'high' | 'heuristic';
 }> = [
   {
     name: 'AWS Access Key ID',
     pattern: /\bAKIA[0-9A-Z]{16}\b/g,
     description: 'AWS access key ID pattern detected',
+    confidence: 'high',
   },
   {
     name: 'Private Key',
     pattern: /-----BEGIN (?:RSA |DSA |EC |OPENSSH )?PRIVATE KEY-----/g,
     description: 'Private key block detected',
+    confidence: 'high',
   },
   {
     name: 'GitHub Token',
     pattern: /\b(ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9]{22}_[a-zA-Z0-9]{59})\b/g,
     description: 'GitHub personal access token pattern detected',
+    confidence: 'high',
   },
   {
     name: 'GitLab Token',
     pattern: /\bglpat-[a-zA-Z0-9\-]{20}\b/g,
     description: 'GitLab personal access token pattern detected',
+    confidence: 'high',
   },
   {
     name: 'Slack Token',
     pattern: /\bxox[baprs]-[a-zA-Z0-9\-]+\b/g,
     description: 'Slack token pattern detected',
+    confidence: 'high',
   },
   {
     name: 'Stripe Key',
     pattern: /\bsk_(test|live)_[a-zA-Z0-9]{24,}\b/g,
     description: 'Stripe secret key pattern detected',
+    confidence: 'high',
   },
   {
     name: 'Generic API Key',
     pattern: /\b(api[_-]?key|apikey)\s*[:=]\s*["\']?[a-zA-Z0-9_\-]{16,}["\']?/gi,
     description: 'Potential API key pattern detected',
+    confidence: 'heuristic',
   },
   {
     name: 'Connection String with Password',
     pattern: /(?:mongodb|postgres|mysql|redis):\/\/[^:\s]+:[^@\s]+@/gi,
     description: 'Connection string with embedded password detected',
+    confidence: 'heuristic',
   },
   {
     name: 'Bearer Token',
     pattern: /\b[Bb]earer\s+[a-zA-Z0-9_\-\.]{20,}\b/g,
     description: 'Bearer token pattern detected',
+    confidence: 'heuristic',
   },
   {
     name: 'Password Assignment',
     pattern: /\b(password|passwd|pwd)\s*[:=]\s*["\'][^"\']{8,}["\']/gi,
     description: 'Hardcoded password assignment detected',
+    confidence: 'heuristic',
   },
 ];
 
@@ -122,6 +133,74 @@ const SKIP_PATTERNS = [
 
 // Max file size to scan (1MB)
 const MAX_FILE_SIZE = 1024 * 1024;
+
+function isLikelyRegexLiteral(line: string): boolean {
+  const trimmed = line.trim();
+
+  if (/(?:new\s+)?RegExp\s*\(/.test(trimmed)) {
+    return true;
+  }
+
+  // Python raw/f-string raw regex literals, e.g. r'...'
+  if (/(^|[\s(,])(?:rf|fr|r)["']/.test(trimmed)) {
+    return true;
+  }
+
+  // JS regex literal with escaped classes, e.g. /foo\s+bar/i
+  if (/\/(?:[^\/\\]|\\.)*\\[wWsSdDbB](?:[^\/\\]|\\.)*\/[gimsuy]*/.test(trimmed)) {
+    return true;
+  }
+
+  // Generic regex-ish content in quoted strings used for pattern definitions.
+  if (/\\[wWsSdDbB]/.test(trimmed) && /[\[\]{}()|*+?.^]/.test(trimmed)) {
+    return true;
+  }
+
+  return false;
+}
+
+function isReferenceLikePath(relativePath: string): boolean {
+  const normalized = relativePath.toLowerCase();
+  return /(^|\/)(docs?|reference|references|examples?|samples?|templates?)\//.test(normalized);
+}
+
+function isKnowledgeBundlePath(relativePath: string): boolean {
+  const normalized = relativePath.replaceAll('\\', '/').toLowerCase();
+  return normalized.startsWith('skills/') || normalized.includes('/skills/');
+}
+
+function isLikelyCommentLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) {
+    return true;
+  }
+
+  return (
+    trimmed.startsWith('#') ||
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('/*') ||
+    trimmed.startsWith('*') ||
+    trimmed.startsWith('--')
+  );
+}
+
+function isLikelyExampleLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    lower.includes('example') ||
+    lower.includes('placeholder') ||
+    lower.includes('sample') ||
+    lower.includes('dummy') ||
+    lower.includes('fake') ||
+    lower.includes('changeme') ||
+    lower.includes('your_') ||
+    lower.includes('<token>') ||
+    lower.includes('<password>') ||
+    lower.includes('<api_key>') ||
+    lower.includes('<apikey>') ||
+    lower.includes('token:') && lower.includes('"***"')
+  );
+}
 
 /**
  * Scans snapshot directory for potential secrets
@@ -202,13 +281,47 @@ async function scanFile(
     return;
   }
 
+  const extLower = path.extname(filePath).toLowerCase();
+  const isDocLike = extLower === '.md' || extLower === '.mdx' || extLower === '.txt';
+  const isReferencePath = isReferenceLikePath(relativePath);
+  const isKnowledgePath = isKnowledgeBundlePath(relativePath);
+
   // Scan each line for patterns
   const lines = content.split('\n');
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const line = lines[lineNum];
+    const trimmed = line.trim();
 
-    for (const { name, pattern, description } of SECRET_PATTERNS) {
+    for (const { name, pattern, description, confidence } of SECRET_PATTERNS) {
+      // Reduce false positives in documentation files:
+      // keep only high-confidence patterns in markdown/text.
+      if (isDocLike && confidence !== 'high') {
+        continue;
+      }
+
+      // Reference/example directories are often instructional content.
+      // Keep only high-confidence patterns there.
+      if (isReferencePath && confidence !== 'high') {
+        continue;
+      }
+
+      // Skill/reference repositories often include instructional examples.
+      // Keep only high-confidence matches there.
+      if (isKnowledgePath && confidence !== 'high') {
+        continue;
+      }
+
+      // Heuristic rules should not flag regex definitions/examples in code.
+      if (confidence !== 'high' && isLikelyRegexLiteral(line)) {
+        continue;
+      }
+
+      // Heuristic rules should not flag comments or obvious placeholders.
+      if (confidence !== 'high' && (isLikelyCommentLine(trimmed) || isLikelyExampleLine(line))) {
+        continue;
+      }
+
       // Reset pattern lastIndex for global regex
       pattern.lastIndex = 0;
 

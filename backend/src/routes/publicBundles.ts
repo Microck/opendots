@@ -10,7 +10,11 @@ import { parse as parseJsonc } from 'comment-json';
 import { materializeSnapshotToLocal } from '../storage/snapshots.js';
 
 const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
+const MAX_README_PREVIEW_SIZE = 1024 * 1024; // 1MB
+const MAX_OVERVIEW_README_SIZE = 3 * 1024 * 1024; // 3MB
 const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const OVERVIEW_MARKER_START = '<!-- OPENDOTS_AUTO_CONTENTS_START -->';
+const OVERVIEW_MARKER_END = '<!-- OPENDOTS_AUTO_CONTENTS_END -->';
 
 interface BundleListQuery {
   q?: string;
@@ -789,6 +793,66 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
+function isReadmePath(filePath: string): boolean {
+  const normalized = filePath.trim().toLowerCase();
+  return normalized === 'readme.md' || normalized.endsWith('/readme.md');
+}
+
+function getPreviewLimitForPath(filePath: string): number {
+  return isReadmePath(filePath) ? MAX_README_PREVIEW_SIZE : MAX_PREVIEW_SIZE;
+}
+
+function findReadmePath(fileIndex: ParsedFileIndexEntry[] | null): string | null {
+  if (!fileIndex || fileIndex.length === 0) {
+    return null;
+  }
+
+  const entries = fileIndex
+    .filter((entry): entry is ParsedFileIndexEntry & { path: string } => typeof entry.path === 'string')
+    .map((entry) => entry.path);
+
+  const exactRoot = entries.find((entry) => entry.toLowerCase() === 'readme.md');
+  if (exactRoot) {
+    return exactRoot;
+  }
+
+  const nested = entries
+    .filter((entry) => entry.toLowerCase().endsWith('/readme.md'))
+    .sort((a, b) => a.length - b.length);
+
+  return nested[0] ?? null;
+}
+
+function extractOverviewMarkdown(readmeContent: string): { source: 'markers' | 'contents' | 'full'; markdown: string } {
+  const markerStart = readmeContent.indexOf(OVERVIEW_MARKER_START);
+  const markerEnd = readmeContent.indexOf(OVERVIEW_MARKER_END);
+  if (markerStart >= 0 && markerEnd > markerStart) {
+    const section = readmeContent
+      .slice(markerStart + OVERVIEW_MARKER_START.length, markerEnd)
+      .trim();
+
+    if (section.length > 0) {
+      return {
+        source: 'markers',
+        markdown: section,
+      };
+    }
+  }
+
+  const contentsMatch = readmeContent.match(/(?:^|\n)##\s+Contents\s*\n([\s\S]*?)(?:\n##\s+|\n#\s+|$)/i);
+  if (contentsMatch?.[1]?.trim()) {
+    return {
+      source: 'contents',
+      markdown: contentsMatch[1].trim(),
+    };
+  }
+
+  return {
+    source: 'full',
+    markdown: readmeContent.trim(),
+  };
+}
+
 export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   // List public bundles for browse/home cards
   fastify.get('/api/bundles', async (request, reply) => {
@@ -1311,9 +1375,12 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           return { error: 'File is not previewable (binary file)' };
         }
         
-        if (fileEntry.size > MAX_PREVIEW_SIZE) {
+        const previewLimit = getPreviewLimitForPath(filePath);
+        if (fileEntry.size > previewLimit) {
           reply.code(413);
-          return { error: 'File too large to preview (max 100KB)' };
+          return {
+            error: `File too large to preview (max ${Math.round(previewLimit / 1024)}KB)`,
+          };
         }
       }
 
@@ -1326,9 +1393,13 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       // Check content size
-      if (content.length > MAX_PREVIEW_SIZE) {
+      const previewLimit = getPreviewLimitForPath(filePath);
+      const contentByteLength = Buffer.byteLength(content, 'utf8');
+      if (contentByteLength > previewLimit) {
         reply.code(413);
-        return { error: 'File too large to preview (max 100KB)' };
+        return {
+          error: `File too large to preview (max ${Math.round(previewLimit / 1024)}KB)`,
+        };
       }
 
       reply.header('Content-Type', 'text/plain; charset=utf-8');
@@ -1337,6 +1408,70 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       console.error('Failed to fetch file:', error);
       reply.code(500);
       return { error: 'Failed to fetch file' };
+    }
+  });
+
+  // Get README overview content without strict file preview limits.
+  fastify.get('/api/bundles/:id/overview', async (request, reply) => {
+    try {
+      const { id: identifier } = request.params as { id: string };
+      const resolvedBundleId = await resolveBundleId(identifier);
+      if (!resolvedBundleId) {
+        reply.code(404);
+        return { error: 'Bundle not found' };
+      }
+
+      const latestSnapshot = await db.select({
+        storagePath: snapshot.storagePath,
+        commitSha: snapshot.commitSha,
+        fileIndex: snapshot.fileIndex,
+      })
+        .from(snapshot)
+        .where(eq(snapshot.bundleId, resolvedBundleId))
+        .orderBy(desc(snapshot.createdAt))
+        .limit(1);
+
+      if (!latestSnapshot || latestSnapshot.length === 0) {
+        reply.code(404);
+        return { error: 'No snapshot found for this bundle' };
+      }
+
+      const snapshotData = latestSnapshot[0];
+      const fileIndex = parseJson<ParsedFileIndexEntry[]>(snapshotData.fileIndex);
+      const readmePath = findReadmePath(fileIndex);
+      if (!readmePath) {
+        reply.code(404);
+        return { error: 'README not found in bundle snapshot' };
+      }
+
+      const readmeEntry = fileIndex?.find((entry) => entry.path === readmePath);
+      if (typeof readmeEntry?.size === 'number' && readmeEntry.size > MAX_OVERVIEW_README_SIZE) {
+        reply.code(413);
+        return { error: 'README too large for overview extraction' };
+      }
+
+      const localSnapshotPath = await materializeSnapshotToLocal({
+        storagePath: snapshotData.storagePath,
+        bundleId: resolvedBundleId,
+        commitSha: snapshotData.commitSha,
+      });
+
+      const readmeContent = extractFileFromZip(localSnapshotPath, readmePath);
+      if (readmeContent === null) {
+        reply.code(404);
+        return { error: 'README not found in snapshot' };
+      }
+
+      const extracted = extractOverviewMarkdown(readmeContent);
+      return {
+        readmePath,
+        source: extracted.source,
+        markdown: extracted.markdown,
+      };
+    } catch (error) {
+      console.error('Failed to fetch bundle overview:', error);
+      reply.code(500);
+      return { error: 'Failed to fetch bundle overview' };
     }
   });
 

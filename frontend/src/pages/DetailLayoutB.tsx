@@ -39,8 +39,21 @@ import useReactiveSurfaceVars from '../hooks/useReactiveSurfaceVars'
 const CodeContentRenderer = lazy(() => import('../components/CodeContentRenderer'))
 const OVERVIEW_MARKER_START = '<!-- OPENDOTS_AUTO_CONTENTS_START -->'
 const OVERVIEW_MARKER_END = '<!-- OPENDOTS_AUTO_CONTENTS_END -->'
+const OVERVIEW_PAGE_SIZE = 12
 
 type OverviewTab = 'overview' | 'files'
+
+interface OverviewItem {
+  id: string
+  name: string
+  summary: string
+}
+
+interface OverviewSection {
+  id: string
+  title: string
+  items: OverviewItem[]
+}
 
 function pickReadmePath(files: DetailLayoutProps['bundle']['fileIndex']): string | null {
   const normalized = files.map((file) => ({
@@ -60,7 +73,7 @@ function pickReadmePath(files: DetailLayoutProps['bundle']['fileIndex']): string
   return nestedReadmes[0]?.path ?? null
 }
 
-function extractOverviewMarkdown(readmeContent: string): string | null {
+function extractOverviewSection(readmeContent: string): string | null {
   const markerStart = readmeContent.indexOf(OVERVIEW_MARKER_START)
   const markerEnd = readmeContent.indexOf(OVERVIEW_MARKER_END)
   if (markerStart >= 0 && markerEnd > markerStart) {
@@ -69,19 +82,121 @@ function extractOverviewMarkdown(readmeContent: string): string | null {
       .trim()
 
     if (section.length > 0) {
-      return `## Overview\n\n${section}`
+      return section
     }
   }
 
   const contentsMatch = readmeContent.match(/(?:^|\n)##\s+Contents\s*\n([\s\S]*?)(?:\n##\s+|\n#\s+|$)/i)
   if (contentsMatch?.[1]?.trim()) {
-    return `## Contents\n\n${contentsMatch[1].trim()}`
+    return contentsMatch[1].trim()
   }
 
   return null
 }
 
-function buildFallbackOverview(files: DetailLayoutProps['bundle']['fileIndex']): string {
+function stripExtension(name: string): string {
+  return name.replace(/\.[^.]+$/u, '')
+}
+
+function normalizeArtifactName(reference: string): string {
+  const cleaned = reference.trim().replace(/^`|`$/g, '')
+  if (!cleaned) {
+    return 'unknown'
+  }
+
+  const segments = cleaned.split('/').filter(Boolean)
+  const lowerSegments = segments.map((segment) => segment.toLowerCase())
+  const categoryFolders = [
+    'skills',
+    'plugins',
+    'disabled-plugins',
+    'commands',
+    'command',
+    'agents',
+    'agent',
+    'themes',
+    'tools',
+    'rules',
+    'modes',
+    'prompts',
+  ]
+
+  const categoryIndex = lowerSegments.findIndex((segment) => categoryFolders.includes(segment))
+  if (categoryIndex >= 0 && categoryIndex + 1 < segments.length) {
+    const candidate = segments[categoryIndex + 1]
+    if (!candidate.includes('.')) {
+      return candidate
+    }
+    return stripExtension(candidate)
+  }
+
+  const last = segments[segments.length - 1] ?? cleaned
+  if (/^(agents?|skill|readme|claude)\.md$/i.test(last) && segments.length > 1) {
+    return stripExtension(segments[segments.length - 2])
+  }
+
+  return stripExtension(last)
+}
+
+function parseOverviewSections(sectionContent: string): OverviewSection[] {
+  const lines = sectionContent.split('\n')
+  const sections: OverviewSection[] = []
+  let currentSection: OverviewSection | null = null
+
+  for (const line of lines) {
+    const sectionMatch = line.match(/^\s*-\s+\*\*(.+?)\*\*/)
+    if (sectionMatch) {
+      const title = sectionMatch[1].trim()
+      currentSection = {
+        id: title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        title,
+        items: [],
+      }
+      sections.push(currentSection)
+      continue
+    }
+
+    if (!currentSection) {
+      continue
+    }
+
+    const itemMatch = line.match(/^\s*-\s+(?:`([^`]+)`|([^`-][^-]*?))\s*-\s*(.+)$/)
+    if (!itemMatch) {
+      continue
+    }
+
+    const rawReference = (itemMatch[1] ?? itemMatch[2] ?? '').trim()
+    const summary = itemMatch[3]?.trim() ?? ''
+    if (!rawReference) {
+      continue
+    }
+
+    const name = normalizeArtifactName(rawReference)
+    currentSection.items.push({
+      id: `${currentSection.id}:${rawReference}:${currentSection.items.length}`,
+      name,
+      summary,
+    })
+  }
+
+  return sections
+    .map((section) => {
+      const deduped = new Map<string, OverviewItem>()
+      for (const item of section.items) {
+        const key = item.name.toLowerCase()
+        if (!deduped.has(key)) {
+          deduped.set(key, item)
+        }
+      }
+      return {
+        ...section,
+        items: Array.from(deduped.values()),
+      }
+    })
+    .filter((section) => section.items.length > 0)
+}
+
+function buildFallbackOverviewSections(files: DetailLayoutProps['bundle']['fileIndex']): OverviewSection[] {
   const labels: Record<DetailLayoutProps['bundle']['fileIndex'][number]['kind'], string> = {
     config: 'Configuration',
     theme: 'Themes',
@@ -108,25 +223,29 @@ function buildFallbackOverview(files: DetailLayoutProps['bundle']['fileIndex']):
   const orderedKinds = Array.from(filesByKind.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
 
-  const lines = orderedKinds.flatMap(([label, paths]) => {
-    const sortedPaths = [...paths].sort((a, b) => a.localeCompare(b))
-    const topPaths = sortedPaths.slice(0, 8).map((path) => `  - \`${path}\``)
-    const remaining = sortedPaths.length - topPaths.length
-    if (remaining > 0) {
-      topPaths.push(`  - ...and ${remaining} more`) 
+  return orderedKinds.map(([label, paths]) => {
+    const byName = new Map<string, number>()
+    for (const path of paths) {
+      const name = normalizeArtifactName(path)
+      byName.set(name, (byName.get(name) ?? 0) + 1)
     }
 
-    return [`- **${label}** (${sortedPaths.length})`, ...topPaths]
-  })
+    const items = Array.from(byName.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([name, count], index) => ({
+        id: `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}:${index}:${name}`,
+        name,
+        summary: count > 1
+          ? `${count} related files detected in this bundle.`
+          : 'Detected in this bundle.',
+      }))
 
-  return [
-    '## Bundle Overview',
-    '',
-    'This bundle does not expose an auto-generated README overview block yet.',
-    'Below is a fallback inventory grouped by artifact type:',
-    '',
-    ...lines,
-  ].join('\n')
+    return {
+      id: label.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      title: label,
+      items,
+    }
+  })
 }
 
 export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLayoutProps) {
@@ -136,6 +255,8 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
   const [shareLinkCopied, setShareLinkCopied] = useState(false)
   const [activeTab, setActiveTab] = useState<OverviewTab>('overview')
   const [overviewMarkdown, setOverviewMarkdown] = useState<string>('')
+  const [overviewSections, setOverviewSections] = useState<OverviewSection[]>([])
+  const [overviewVisibleCounts, setOverviewVisibleCounts] = useState<Record<string, number>>({})
   const [overviewLoading, setOverviewLoading] = useState(false)
   const [overviewError, setOverviewError] = useState<string | null>(null)
 
@@ -155,6 +276,8 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
 
   const themedStyle = buildThemedStyle(bundle)
   const author = bundle.owner || bundle.githubFullName.split('/')[0]
+  const repoName = bundle.githubFullName.split('/')[1] || bundle.name
+  const customDisplayName = bundle.name
   const avatarUrl = bundle.ownerAvatarUrl || `https://github.com/${author}.png`
   const bundleUrl = siteUrl(`/${bundle.shareCode || bundle.id}`)
   const installPrompt = `Fetch and follow ${siteUrl('/INSTALL.md')} for bundle URL: ${bundleUrl}`
@@ -195,7 +318,9 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
 
     const loadOverview = async () => {
       if (!overviewReadmePath) {
-        setOverviewMarkdown(buildFallbackOverview(bundle.fileIndex))
+        setOverviewLoading(false)
+        setOverviewMarkdown('')
+        setOverviewSections(buildFallbackOverviewSections(bundle.fileIndex))
         setOverviewError(null)
         return
       }
@@ -218,14 +343,24 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
           return
         }
 
-        const extracted = extractOverviewMarkdown(readmeContent)
-        if (extracted) {
-          setOverviewMarkdown(extracted)
+        const sectionContent = extractOverviewSection(readmeContent)
+        if (sectionContent) {
+          const parsedSections = parseOverviewSections(sectionContent)
+          if (parsedSections.length > 0) {
+            setOverviewSections(parsedSections)
+            setOverviewMarkdown('')
+            setOverviewError(null)
+            return
+          }
+
+          setOverviewMarkdown(`## Overview\n\n${sectionContent}`)
+          setOverviewSections([])
           setOverviewError(null)
           return
         }
 
-        setOverviewMarkdown(buildFallbackOverview(bundle.fileIndex))
+        setOverviewMarkdown('')
+        setOverviewSections(buildFallbackOverviewSections(bundle.fileIndex))
         setOverviewError(null)
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
@@ -236,7 +371,8 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
           return
         }
 
-        setOverviewMarkdown(buildFallbackOverview(bundle.fileIndex))
+        setOverviewMarkdown('')
+        setOverviewSections(buildFallbackOverviewSections(bundle.fileIndex))
         setOverviewError('Unable to read bundle README overview. Showing fallback inventory.')
       } finally {
         if (!cancelled) {
@@ -252,6 +388,41 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
       abortController.abort()
     }
   }, [bundle.fileIndex, bundle.id, overviewReadmePath])
+
+  useEffect(() => {
+    if (overviewSections.length === 0) {
+      setOverviewVisibleCounts({})
+      return
+    }
+
+    const next: Record<string, number> = {}
+    for (const section of overviewSections) {
+      next[section.id] = Math.min(OVERVIEW_PAGE_SIZE, section.items.length)
+    }
+    setOverviewVisibleCounts(next)
+  }, [overviewSections])
+
+  const handleLoadMoreOverview = (sectionId: string) => {
+    setOverviewVisibleCounts((prev) => ({
+      ...prev,
+      [sectionId]: Math.min(
+        (prev[sectionId] ?? OVERVIEW_PAGE_SIZE) + OVERVIEW_PAGE_SIZE,
+        overviewSections.find((section) => section.id === sectionId)?.items.length ?? OVERVIEW_PAGE_SIZE,
+      ),
+    }))
+  }
+
+  const handleLoadAllOverview = (sectionId: string) => {
+    const total = overviewSections.find((section) => section.id === sectionId)?.items.length
+    if (!total) {
+      return
+    }
+
+    setOverviewVisibleCounts((prev) => ({
+      ...prev,
+      [sectionId]: total,
+    }))
+  }
 
   return (
     <div className={styles.page} style={themedStyle}>
@@ -276,12 +447,18 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
             />
             <span className={styles.authorHandle}>@{author}</span>
             <span className={styles.authorSep} aria-hidden>/</span>
-            <span className={styles.authorRepo}>{bundle.name}</span>
+            <span className={styles.authorRepo}>{repoName}</span>
           </motion.div>
 
           <motion.h1 className={styles.heroTitle} variants={v(fadeInDown)}>
-            {bundle.name.toUpperCase()}
+            {repoName.toUpperCase()}
           </motion.h1>
+
+          {customDisplayName && customDisplayName.toLowerCase() !== repoName.toLowerCase() && (
+            <motion.p className={styles.heroAlias} variants={v(fadeInUp)}>
+              Display name: {customDisplayName}
+            </motion.p>
+          )}
 
           <motion.p className={styles.heroSummary} variants={v(fadeInUp)}>
             {bundle.summary || bundle.description || 'No description available'}
@@ -487,13 +664,60 @@ export default function DetailLayoutB({ bundle, prefersReducedMotion }: DetailLa
                   ) : (
                     <>
                       {overviewError && <div className={styles.overviewWarning}>{overviewError}</div>}
-                      <Suspense fallback={<div className={styles.overviewState}>Rendering overview...</div>}>
-                        <CodeContentRenderer
-                          content={overviewMarkdown}
-                          isMarkdown={true}
-                          language="markdown"
-                        />
-                      </Suspense>
+                      {overviewSections.length > 0 ? (
+                        <div className={styles.overviewSections}>
+                          {overviewSections.map((section) => {
+                            const visibleCount = overviewVisibleCounts[section.id] ?? Math.min(OVERVIEW_PAGE_SIZE, section.items.length)
+                            const hasMore = visibleCount < section.items.length
+                            const visibleItems = section.items.slice(0, visibleCount)
+
+                            return (
+                              <section key={section.id} className={styles.overviewSectionBlock}>
+                                <header className={styles.overviewSectionHeader}>
+                                  <h3 className={styles.overviewSectionTitle}>{section.title}</h3>
+                                  <span className={styles.overviewSectionCount}>{section.items.length}</span>
+                                </header>
+
+                                <ul className={styles.overviewList}>
+                                  {visibleItems.map((item) => (
+                                    <li key={item.id} className={styles.overviewListItem}>
+                                      <div className={styles.overviewItemName}>{item.name}</div>
+                                      <p className={styles.overviewItemSummary}>{item.summary}</p>
+                                    </li>
+                                  ))}
+                                </ul>
+
+                                {hasMore && (
+                                  <div className={styles.overviewActions}>
+                                    <button
+                                      type="button"
+                                      className={styles.overviewActionButton}
+                                      onClick={() => handleLoadMoreOverview(section.id)}
+                                    >
+                                      Load more
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={styles.overviewActionButton}
+                                      onClick={() => handleLoadAllOverview(section.id)}
+                                    >
+                                      Load all
+                                    </button>
+                                  </div>
+                                )}
+                              </section>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <Suspense fallback={<div className={styles.overviewState}>Rendering overview...</div>}>
+                          <CodeContentRenderer
+                            content={overviewMarkdown}
+                            isMarkdown={true}
+                            language="markdown"
+                          />
+                        </Suspense>
+                      )}
                     </>
                   )}
                 </div>

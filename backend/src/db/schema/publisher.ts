@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
-import { user } from './auth.js';
+import { user } from './auth';
 
 export const publisherBundle = sqliteTable(
   'publisher_bundle',
@@ -16,6 +16,8 @@ export const publisherBundle = sqliteTable(
     repoHtmlUrl: text('repoHtmlUrl'),
     manifestJson: text('manifestJson'),
     accentColor: text('accentColor'),
+    // Short public share code (5 chars, starts with digit). Nullable for legacy rows and backfills.
+    shareCode: text('shareCode'),
     stars: integer('stars').notNull().default(0),
     forks: integer('forks').notNull().default(0),
     status: text('status').notNull().default('registered'),
@@ -24,6 +26,7 @@ export const publisherBundle = sqliteTable(
   },
   (table) => ({
     githubFullNameUniqueIdx: uniqueIndex('publisher_bundle_github_full_name_unique_idx').on(table.githubFullName),
+    shareCodeUniqueIdx: uniqueIndex('publisher_bundle_share_code_unique_idx').on(table.shareCode),
   })
 );
 

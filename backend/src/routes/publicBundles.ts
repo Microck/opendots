@@ -8,6 +8,7 @@ import { extractFileFromZip } from '../import/fileIndex.js';
 import { generateZipStream, isValidVariant } from '../import/zipGenerator.js';
 import { parse as parseJsonc } from 'comment-json';
 import { materializeSnapshotToLocal } from '../storage/snapshots.js';
+import { ensureBundleShareCode, isShortShareCode, resolveBundleIdFromShortShareCode } from '../share/shareCode.js';
 
 const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
 const MAX_README_PREVIEW_SIZE = 1024 * 1024; // 1MB
@@ -861,6 +862,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const bundles = await db.select({
         id: publisherBundle.id,
+        shareCode: publisherBundle.shareCode,
         githubOwner: publisherBundle.githubOwner,
         githubRepo: publisherBundle.githubRepo,
         status: publisherBundle.status,
@@ -913,6 +915,10 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           );
           const updatedAtMs = new Date(updatedAt).getTime();
 
+          const shareCode = typeof bundle.shareCode === 'string' && isShortShareCode(bundle.shareCode)
+            ? bundle.shareCode
+            : (await ensureBundleShareCode(bundle.id)) ?? toBundleShareCode(bundle.id);
+
           const resolvedAccentColor = cardTheme
             ? (bundle.accentColor ?? cardTheme?.border ?? getDeterministicAccent(bundle.id))
             : null;
@@ -923,7 +929,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
             _opencodeCompatibility: string;
           } = {
             id: bundle.id,
-            shareCode: toBundleShareCode(bundle.id),
+            shareCode,
             slug,
             name,
             summary,
@@ -991,11 +997,17 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
   });
 
   async function resolveShareCodeToBundleId(code: string): Promise<string | null> {
-    const decodedBundleId = bundleIdFromShareCode(code);
+    const normalized = code.trim();
+
+    if (isShortShareCode(normalized)) {
+      return await resolveBundleIdFromShortShareCode(normalized);
+    }
+
+    const decodedBundleId = bundleIdFromShareCode(normalized);
 
     let resolvedBundleId = decodedBundleId;
     if (!resolvedBundleId) {
-      resolvedBundleId = await resolveBundleId(code);
+      resolvedBundleId = await resolveBundleId(normalized);
     }
 
     if (!resolvedBundleId) {
@@ -1147,6 +1159,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const bundle = await db.select({
         id: publisherBundle.id,
+        shareCode: publisherBundle.shareCode,
         githubFullName: publisherBundle.githubFullName,
         githubOwner: publisherBundle.githubOwner,
         githubRepo: publisherBundle.githubRepo,
@@ -1169,6 +1182,10 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
       }
 
       const bundleData = bundle[0];
+
+      const shareCode = typeof bundleData.shareCode === 'string' && isShortShareCode(bundleData.shareCode)
+        ? bundleData.shareCode
+        : (await ensureBundleShareCode(bundleData.id)) ?? toBundleShareCode(bundleData.id);
 
       // Get most recent snapshots for diff/change summary.
       const recentSnapshots = await db.select({
@@ -1257,7 +1274,7 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       return {
         id: bundleData.id,
-        shareCode: toBundleShareCode(bundleData.id),
+        shareCode,
         name: manifest?.name || bundleData.githubRepo,
         summary: manifest?.summary || '',
         description: manifest?.description || '',

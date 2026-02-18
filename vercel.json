@@ -41,6 +41,10 @@
       "destination": "/api?__opendots_path=$1"
     },
     {
+      "source": "/:shareCode([0-9][0-9A-Za-z]{4})",
+      "destination": "/api?__opendots_path=share/:shareCode/redirect"
+    },
+    {
       "source": "/:shareCode([0-9A-Za-z]{20,22})",
       "destination": "/api?__opendots_path=share/:shareCode/redirect"
     },

@@ -6,7 +6,7 @@ import { publishClaim, publisherBundle } from '../db/schema/publisher.js';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { fetchAndValidateManifest } from '../import/manifest.js';
 import { importBundlePublic } from '../import/importer.js';
-import { getPublicFileContent, getPublicRepoInfo } from '../github/publicGitHub.js';
+import { getPublicFileContent, getPublicHeadCommitSha, getPublicRepoInfo } from '../github/publicGitHub.js';
 import { checkRateLimit } from '../security/rateLimit.js';
 import { verifyTurnstileToken } from '../security/turnstile.js';
 
@@ -391,13 +391,28 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
 
       const defaultBranch = repoInfo.default_branch || 'main';
 
+      // Fetch the HEAD commit SHA for the default branch so we can read raw content
+      // by immutable ref. This avoids regional CDN staleness for branch-based raw URLs.
+      let headSha: string | null = null;
+      try {
+        headSha = await getPublicHeadCommitSha(parsed.owner, parsed.repo, defaultBranch);
+      } catch (error) {
+        const mapped = mapGitHubError(error);
+        if (mapped) {
+          reply.code(mapped.statusCode);
+          return { code: mapped.code, message: mapped.message };
+        }
+        // Best-effort only; fall back to branch ref.
+        headSha = null;
+      }
+
       // Verify claim file content.
       let claimContent;
       try {
         claimContent = await getPublicFileContent({
           owner: parsed.owner,
           repo: parsed.repo,
-          ref: defaultBranch,
+          ref: headSha ?? defaultBranch,
           path: claim.claimFilePath,
         });
       } catch (error) {
@@ -409,11 +424,27 @@ export const publishClaimRoute: FastifyPluginAsync = fp(async (fastify) => {
         throw error;
       }
 
+      // If we used an immutable SHA ref but didn't get a match, retry against the branch
+      // ref once. This helps during the brief window where the branch HEAD SHA is visible
+      // via the API but raw content isn't fully propagated.
+      if (headSha && (!claimContent || claimContent.trim() !== claimCode)) {
+        try {
+          claimContent = await getPublicFileContent({
+            owner: parsed.owner,
+            repo: parsed.repo,
+            ref: defaultBranch,
+            path: claim.claimFilePath,
+          });
+        } catch {
+          // Ignore; we'll surface the mismatch below.
+        }
+      }
+
       if (!claimContent || claimContent.trim() !== claimCode) {
         reply.code(400);
         return {
           code: 'CLAIM_NOT_FOUND',
-          message: `Claim file not found or does not match. Ensure ${claim.claimFilePath} exists on ${defaultBranch} and contains the exact claim code.`
+          message: `Claim file not found or does not match. Ensure ${claim.claimFilePath} exists on ${defaultBranch} and contains the exact claim code. If you just pushed, wait ~30s and retry.`
         };
       }
 

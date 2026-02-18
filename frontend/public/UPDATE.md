@@ -36,6 +36,11 @@ curl -fsSL "$OPENDOTS_SITE_BASE/opendots-refresh.sh" | bash -s -- owner/repo
 
 This automates claim start -> claim file commit/push -> claim complete.
 
+Notes:
+
+- The script uses the server-provided `claimFilePath` (do not hardcode it).
+- The script retries `CLAIM_NOT_FOUND` briefly. This can happen right after a push due to GitHub raw propagation.
+
 ---
 
 ## Step 1 - Update bundle files
@@ -127,13 +132,20 @@ print(payload.get('claimCode', ''))
 PY
 )
 
+CLAIM_FILE_PATH=$(python3 - <<'PY' "$CLAIM_JSON"
+import json, sys
+payload = json.loads(sys.argv[1])
+print(payload.get('claimFilePath', 'opendots-claim.txt'))
+PY
+)
+
 if [ -z "$CLAIM_CODE" ]; then
   echo "No claimCode returned. If API returned CAPTCHA_FAILED, use Dashboard refresh instead."
   exit 1
 fi
 
-printf "%s\n" "$CLAIM_CODE" > opendots-claim.txt
-git add opendots-claim.txt
+printf "%s\n" "$CLAIM_CODE" > "$CLAIM_FILE_PATH"
+git add "$CLAIM_FILE_PATH"
 git commit -m "chore: refresh OpenDots claim"
 git push
 

@@ -1576,7 +1576,7 @@ def is_safe_public_url(url: str) -> bool:
     return False
   return True
 
-def best_mcp_link_url(name: str, cfg: object, npm_cache: dict[str, str], overrides: dict[str, dict[str, str]]) -> str:
+def best_mcp_link_url(name: str, cfg: object, repo: Path, npm_cache: dict[str, str], overrides: dict[str, dict[str, str]]) -> str:
   """Best-effort URL for the MCP name link.
 
   Priority:
@@ -1596,10 +1596,22 @@ def best_mcp_link_url(name: str, cfg: object, npm_cache: dict[str, str], overrid
   if not isinstance(cfg, dict):
     return ''
 
+  # If the MCP uses a local wrapper file in this repo, link to it.
   cmd_parts = command_tokens(cfg.get('command'))
   args = cfg.get('args')
   arg_parts = [a.strip() for a in args if isinstance(a, str) and a.strip()] if isinstance(args, list) else []
   combined = cmd_parts[1:] + arg_parts
+
+  maybe_paths = [t for t in combined if isinstance(t, str) and (t.startswith('./') or t.startswith('/') or '/' in t)]
+  for p in maybe_paths:
+    p_clean = p[2:] if p.startswith('./') else p
+    candidate = (repo / p_clean).resolve() if not Path(p_clean).is_absolute() else Path(p_clean)
+    try:
+      if candidate.exists() and candidate.is_file() and repo in candidate.resolve().parents:
+        rel = candidate.relative_to(repo).as_posix()
+        return f'./{rel}'
+    except Exception:
+      pass
 
   cmd = cmd_parts[0] if cmd_parts else ''
   cmd_base = Path(cmd).name.lower() if cmd else ''
@@ -1766,7 +1778,7 @@ def collect_mcp_entries(repo: Path) -> list[tuple[str, str]]:
   for name in sorted(mcp.keys()):
     cfg = mcp.get(name)
     summary = guess_mcp_summary(name, cfg, repo, overrides)
-    url = best_mcp_link_url(name, cfg, npm_cache, overrides)
+    url = best_mcp_link_url(name, cfg, repo, npm_cache, overrides)
     display = f'[{name}]({url})' if url else f'`{name}`'
     rows.append((display, summary))
 

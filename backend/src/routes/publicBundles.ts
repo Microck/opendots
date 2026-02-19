@@ -14,6 +14,9 @@ const MAX_PREVIEW_SIZE = 100 * 1024; // 100KB
 const MAX_README_PREVIEW_SIZE = 1024 * 1024; // 1MB
 const MAX_OVERVIEW_README_SIZE = 3 * 1024 * 1024; // 3MB
 const BASE62_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const DERIVED_SHORT_CODE_LENGTH = 5;
+const DERIVED_SHORT_CODE_REST_LENGTH = DERIVED_SHORT_CODE_LENGTH - 1;
+const DERIVED_SHORT_CODE_REST_SPACE = 62 ** DERIVED_SHORT_CODE_REST_LENGTH;
 const OVERVIEW_MARKER_START = '<!-- OPENDOTS_AUTO_CONTENTS_START -->';
 const OVERVIEW_MARKER_END = '<!-- OPENDOTS_AUTO_CONTENTS_END -->';
 
@@ -107,6 +110,35 @@ function toBundleShareCode(bundleId: string): string {
   return encodeHexToBase62(normalizedHex);
 }
 
+function encodeBase62Fixed(value: number, length: number): string {
+  let v = value;
+  let out = '';
+  for (let i = 0; i < length; i += 1) {
+    const remainder = v % 62;
+    out = `${BASE62_ALPHABET[remainder]}${out}`;
+    v = Math.floor(v / 62);
+  }
+  return out;
+}
+
+function fnv1a32(input: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+function toDerivedShortShareCode(bundleId: string): string {
+  const prefixHash = fnv1a32(`prefix:${bundleId}`);
+  const restHash = fnv1a32(`rest:${bundleId}`);
+
+  const prefix = String(prefixHash % 10);
+  const rest = encodeBase62Fixed(restHash % DERIVED_SHORT_CODE_REST_SPACE, DERIVED_SHORT_CODE_REST_LENGTH);
+  return `${prefix}${rest}`;
+}
+
 function bundleIdFromShareCode(code: string): string | null {
   const normalizedCode = code.trim();
   if (!/^[0-9A-Za-z]+$/.test(normalizedCode)) {
@@ -175,6 +207,38 @@ interface ShareBundleMeta {
 }
 
 const MAX_CHANGE_SAMPLE_PATHS = 12;
+
+function buildDerivedShortCodeCounts(bundleIds: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const bundleId of bundleIds) {
+    const code = toDerivedShortShareCode(bundleId);
+    counts.set(code, (counts.get(code) ?? 0) + 1);
+  }
+  return counts;
+}
+
+async function resolveBundleIdFromDerivedShortShareCode(code: string): Promise<string | null> {
+  const normalized = code.trim();
+  if (!isShortShareCode(normalized)) {
+    return null;
+  }
+
+  const rows = await db.select({ id: publisherBundle.id })
+    .from(publisherBundle)
+    .where(eq(publisherBundle.status, 'registered'));
+
+  const matches = rows
+    .map((row) => row.id)
+    .filter((bundleId) => toDerivedShortShareCode(bundleId) === normalized);
+
+  return matches.length === 1 ? matches[0] : null;
+}
+
+async function getUniqueDerivedShortShareCode(bundleId: string): Promise<string | null> {
+  const derived = toDerivedShortShareCode(bundleId);
+  const resolvedBundleId = await resolveBundleIdFromDerivedShortShareCode(derived);
+  return resolvedBundleId === bundleId ? derived : null;
+}
 
 async function resolveBundleId(identifier: string): Promise<string | null> {
   const raw = identifier.trim();
@@ -876,6 +940,8 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         .from(publisherBundle)
         .where(eq(publisherBundle.status, 'registered'));
 
+      const derivedShortCodeCounts = buildDerivedShortCodeCounts(bundles.map((bundle) => bundle.id));
+
       const cards = await Promise.all(
         bundles.map(async (bundle) => {
           const latestSnapshot = await db.select({
@@ -923,10 +989,19 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
               const ensured = await ensureBundleShareCode(bundle.id);
               if (ensured && isShortShareCode(ensured)) {
                 shareCode = ensured;
+              } else {
+                const derivedShortCode = toDerivedShortShareCode(bundle.id);
+                if ((derivedShortCodeCounts.get(derivedShortCode) ?? 0) === 1) {
+                  shareCode = derivedShortCode;
+                }
               }
             } catch (error) {
               // Best-effort backfill only; never block listing bundles.
               console.warn('Failed to ensure share code (list):', error);
+              const derivedShortCode = toDerivedShortShareCode(bundle.id);
+              if ((derivedShortCodeCounts.get(derivedShortCode) ?? 0) === 1) {
+                shareCode = derivedShortCode;
+              }
             }
           }
 
@@ -1015,6 +1090,11 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         const resolved = await resolveBundleIdFromShortShareCode(normalized);
         if (resolved) {
           return resolved;
+        }
+
+        const derivedResolved = await resolveBundleIdFromDerivedShortShareCode(normalized);
+        if (derivedResolved) {
+          return derivedResolved;
         }
       } catch (error) {
         // Don't block legacy resolutions if the short-code lookup fails.
@@ -1210,10 +1290,19 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
           const ensured = await ensureBundleShareCode(bundleData.id);
           if (ensured && isShortShareCode(ensured)) {
             shareCode = ensured;
+          } else {
+            const derived = await getUniqueDerivedShortShareCode(bundleData.id);
+            if (derived) {
+              shareCode = derived;
+            }
           }
         } catch (error) {
           // Best-effort backfill only; never block bundle detail.
           console.warn('Failed to ensure share code (detail):', error);
+          const derived = await getUniqueDerivedShortShareCode(bundleData.id);
+          if (derived) {
+            shareCode = derived;
+          }
         }
       }
 

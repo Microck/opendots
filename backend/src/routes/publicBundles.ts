@@ -240,6 +240,43 @@ async function getUniqueDerivedShortShareCode(bundleId: string): Promise<string 
   return resolvedBundleId === bundleId ? derived : null;
 }
 
+async function resolveBundleIdFromVisibleShortShareCode(code: string): Promise<string | null> {
+  const normalized = code.trim();
+  if (!isShortShareCode(normalized)) {
+    return null;
+  }
+
+  const rows = await db.select({
+    id: publisherBundle.id,
+    shareCode: publisherBundle.shareCode,
+  })
+    .from(publisherBundle)
+    .where(eq(publisherBundle.status, 'registered'));
+
+  const directMatches = rows.filter((row) => {
+    if (typeof row.shareCode !== 'string' || !isShortShareCode(row.shareCode)) {
+      return false;
+    }
+    return row.shareCode.trim() === normalized;
+  });
+
+  if (directMatches.length === 1) {
+    return directMatches[0].id;
+  }
+
+  if (directMatches.length > 1) {
+    return null;
+  }
+
+  const derivedShortCodeCounts = buildDerivedShortCodeCounts(rows.map((row) => row.id));
+  if ((derivedShortCodeCounts.get(normalized) ?? 0) !== 1) {
+    return null;
+  }
+
+  const derivedMatch = rows.find((row) => toDerivedShortShareCode(row.id) === normalized);
+  return derivedMatch?.id ?? null;
+}
+
 async function resolveBundleId(identifier: string): Promise<string | null> {
   const raw = identifier.trim();
   if (!raw) {
@@ -1091,14 +1128,28 @@ export const publicBundlesRoute: FastifyPluginAsync = fp(async (fastify) => {
         if (resolved) {
           return resolved;
         }
+      } catch (error) {
+        console.warn('Failed to resolve persisted short share code:', error);
+      }
 
+      try {
         const derivedResolved = await resolveBundleIdFromDerivedShortShareCode(normalized);
         if (derivedResolved) {
           return derivedResolved;
         }
       } catch (error) {
-        // Don't block legacy resolutions if the short-code lookup fails.
-        console.warn('Failed to resolve short share code:', error);
+        // Don't block legacy resolutions if derived lookup fails.
+        console.warn('Failed to resolve derived short share code:', error);
+      }
+
+      try {
+        const visibleResolved = await resolveBundleIdFromVisibleShortShareCode(normalized);
+        if (visibleResolved) {
+          return visibleResolved;
+        }
+      } catch (error) {
+        // Don't block legacy resolutions if visibility fallback fails.
+        console.warn('Failed to resolve visible short share code fallback:', error);
       }
     }
 
